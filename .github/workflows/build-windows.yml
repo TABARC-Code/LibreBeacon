@@ -1,0 +1,24 @@
+name: Windows package
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install ".[windows-build]"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name LibreBeacon --collect-all keyring librebeacon_launcher.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LibreBeacon-Windows-unsigned
+          path: dist/LibreBeacon.exe

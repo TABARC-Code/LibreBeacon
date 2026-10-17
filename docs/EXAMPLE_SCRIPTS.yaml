@@ -1,0 +1,38 @@
+# Illustrative entries for Home Assistant's scripts.yaml.
+# DO NOT paste these without choosing your actual light and notification entity IDs.
+# Each runs ONLY when LibreBeacon explicitly starts it.
+# The contact script requires that the recipient has agreed to notifications.
+librebeacon_visual:
+  alias: LibreBeacon visual alert
+  mode: restart
+  fields:
+    event:
+      name: Event
+    message:
+      name: Message
+  sequence:
+    - action: light.turn_on
+      target:
+        entity_id: light.REPLACE_WITH_YOUR_LIGHT
+      data:
+        brightness_pct: 90
+        rgb_color: [255, 0, 0]
+    # Deliberately a steady warning, not a strobe. Personalise in HA if needed.
+    # Do not switch it off automatically here: could leave someone in darkness.
+
+librebeacon_contact:
+  alias: LibreBeacon contact message
+  mode: queued
+  max: 3
+  fields:
+    message:
+      name: Message
+    title:
+      name: Title
+  sequence:
+    - action: notify.send_message
+      target:
+        entity_id: notify.REPLACE_WITH_YOUR_CONTACT_NOTIFICATION_ENTITY
+      data:
+        title: "{{ title | default('LibreBeacon') }}"
+        message: "{{ message | default('LibreBeacon notification') }}"

@@ -1,0 +1,35 @@
+# OPTIONAL ALTERNATIVE visual script for scripts.yaml.
+# Use this *instead of* librebeacon_visual in EXAMPLE_SCRIPTS.yaml.
+# Manual testing required. Not suitable for everybody with photosensitivity.
+# This uses a gentle ~0.33 Hz brightness pulse, not rapid strobe flashes.
+# Unlike flashing light.turn_off, it avoids leaving the room fully dark.
+# Your bulb must support brightness controls; change entity to your own device.
+librebeacon_visual:
+  alias: LibreBeacon slow pulse
+  mode: restart
+  sequence:
+    - repeat:
+        count: 3
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: light.REPLACE_WITH_YOUR_LIGHT
+            data:
+              brightness_pct: 90
+              rgb_color: [255, 0, 0]
+          - delay:
+              milliseconds: 1500
+          - action: light.turn_on
+            target:
+              entity_id: light.REPLACE_WITH_YOUR_LIGHT
+            data:
+              brightness_pct: 30
+              rgb_color: [255, 0, 0]
+          - delay:
+              milliseconds: 1500
+    - action: light.turn_on
+      target:
+        entity_id: light.REPLACE_WITH_YOUR_LIGHT
+      data:
+        brightness_pct: 90
+        rgb_color: [255, 0, 0]

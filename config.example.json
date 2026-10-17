@@ -1,0 +1,11 @@
+{
+  "ha_url": "",
+  "glucose_entity": "",
+  "timestamp_entity": "",
+  "enabled": false,
+  "enable_emergency_contacts": false,
+  "critical_low_mmol": "",
+  "emergency_contact_consent": false,
+  "include_glucose_in_messages": false,
+  "emergency_routes": []
+}
