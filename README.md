@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **1.9.3** · experimental community prototype · MIT licence
+Current version: **4.0.6** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -15,7 +15,8 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 2. Extract the project ZIP into a normal folder such as **Documents → LibreBeacon**.
 3. Double-click **`INSTALL-WINDOWS.bat`**. It creates an isolated local installation and installs the necessary dependency. Internet access is required for this first step.
 4. Double-click **`run-windows.bat`** to open LibreBeacon.
-5. Follow the numbered tabs. No terminal commands or code editing are required inside the app, although Home Assistant and its integrations must already be configured.
+5. Open **Start Here** and use the large numbered setup buttons. Return there and choose **Check Saved Setup** to see what still needs configuring.
+6. Follow the numbered tabs. No terminal commands or code editing are required inside the app, although Home Assistant and its integrations must already be configured.
 
 There is also a developer build script and a GitHub Actions recipe for an unsigned Windows `.exe`. **No tested `.exe` is included in this ZIP.** See [the complete setup guide](docs/SETUP.md).
 
@@ -23,12 +24,13 @@ There is also a developer build script and a GitHub Actions recipe for an unsign
 
 | Tab | Buttons and options |
 | --- | --- |
-| Dashboard | Check reading, open setup, switch supplementary alerts on/off |
+| Dashboard | Check reading and connection health, open setup, switch supplementary alerts on/off |
+| Start Here | Step-by-step setup buttons and saved-configuration checklist |
 | Connection | Save connection, test connection, open Home Assistant |
 | Sensors | Find glucose sensors, select measurement timestamp, test reading |
 | Accessibility | Test sound, spoken message, visual notice; larger text |
 | Alerts | Select and test a Home Assistant lighting script; older contact-script support |
-| Emergency contacts | Find destinations, Show Mesh Nodes, Add, Remove, Test Selected, Save, Help |
+| Emergency contacts | Find destinations, Show Mesh Nodes, Add, Remove, Test Selected, Record Recipient Reply, Save, Help |
 | Alert rules | Set ordinary low and high thresholds, optional critical-low threshold, age and check interval |
 
 **Contact sending is off by default.** Consent is required for every recipient and for enabling automatic critical-low messages. Thresholds deliberately have no default. A configured critical-low alert is distinct from an ordinary low alert, so a reading moving into the critical band can generate an additional event even during an existing low episode. Multiple contact requests are attempted independently; a failed request to one destination need not stop another. That still doesn't confirm actual delivery.
@@ -79,3 +81,14 @@ This update brings the accessibility and contact features together in one Window
 - **Community work:** separated contacts, reading validation and service access into maintainable modules; expanded the user guides, examples and automated tests.
 
 **Status:** v1.9.3 remains a work-in-progress prototype. Live sensor, Windows-device and message-delivery testing are still needed. Keep the official Libre app and its alarms enabled; this software is only an additional notification layer.
+
+## Version 4.0.6 — Guided setup and monitoring improvements
+
+- **Start Here:** larger, numbered buttons open each settings section without typing commands. The checklist flags missing configuration; it doesn't claim equipment has been tested.
+- **Reading health:** visible current, stale, unavailable and clock-error information. Expired glucose readings are hidden automatically from the main display.
+- **Contact test status:** each configured contact shows whether the last request was accepted or failed. An accepted request does **not** mean somebody received it.
+- **Manual recipient reply:** after testing, you can record a reply you personally received. This record is temporary and isn't a remote delivery receipt.
+- **Safer contact names:** duplicate nicknames are rejected so the right contact is matched to the right test result.
+- **More tests and guides:** expanded offline checks for setup, contact requests, timestamps and connection failures.
+
+**Remaining work:** full Windows/device testing, delivery confirmation from independent channels, an easier installer and genuinely unattended monitoring. Keep the official Libre alarms enabled.

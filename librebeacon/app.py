@@ -13,6 +13,9 @@ from .homeassistant import HomeAssistant, HomeAssistantError
 from .outputs import beep, start_speech
 from .settings import Settings, save_token, load_token
 from .contacts import ContactRoute, read_routes, emergency_message, dispatch_emergency
+from .readiness import setup_checks
+from .health import ConnectionHealth
+from .delivery import DeliveryTracker
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -28,6 +31,8 @@ class LibreBeaconApp:
             self.settings = Settings()
         self.session_token = load_token()
         self.engine = AlertEngine()
+        self.health = ConnectionHealth()
+        self.deliveries = DeliveryTracker()
         self.queue: Queue = Queue()
         self.busy_poll = False
         self.next_poll = time.monotonic() + 2
@@ -67,6 +72,7 @@ class LibreBeaconApp:
         self.tabs = ttk.Notebook(self.root)
         self.tabs.pack(fill='both', expand=True, padx=13, pady=7)
         self.dashboard = ttk.Frame(self.tabs, padding=15)
+        self.setup = ttk.Frame(self.tabs, padding=15)
         self.connection = ttk.Frame(self.tabs, padding=15)
         self.sensors = ttk.Frame(self.tabs, padding=15)
         self.access = ttk.Frame(self.tabs, padding=15)
@@ -74,12 +80,13 @@ class LibreBeaconApp:
         self.emergency = ttk.Frame(self.tabs, padding=15)
         self.rules = ttk.Frame(self.tabs, padding=15)
         self.about = ttk.Frame(self.tabs, padding=15)
-        for tab, label in ((self.dashboard,'Dashboard'),(self.connection,'1 · Connection'),
+        for tab, label in ((self.dashboard,'Dashboard'),(self.setup,'Start Here'),(self.connection,'1 · Connection'),
                            (self.sensors,'2 · Sensors'),(self.access,'3 · Accessibility'),
                            (self.contacts,'4 · Alerts'),(self.emergency,'5 · Emergency contacts'),(self.rules,'6 · Alert rules'),
                            (self.about,'About')):
             self.tabs.add(tab, text=label)
         self.build_dashboard()
+        self.build_setup()
         self.build_connection()
         self.build_sensors()
         self.build_access()
@@ -111,14 +118,54 @@ class LibreBeaconApp:
         bar = ttk.Frame(p)
         bar.pack(fill='x',pady=5)
         ttk.Button(bar,text='Refresh Reading',command=self.manual_refresh).pack(side='left',padx=5)
-        ttk.Button(bar,text='Open Setup',command=lambda:self.tabs.select(self.connection)).pack(side='left',padx=5)
+        ttk.Button(bar,text='Open Setup Guide',command=lambda:self.tabs.select(self.setup)).pack(side='left',padx=5)
         self.enable = self.var('enabled','bool')
         ttk.Checkbutton(p,text='Enable supplementary alerts (OFF by default)',variable=self.enable,
                         command=self.toggle_enabled).pack(anchor='w',pady=12)
+        self.connection_health = tk.StringVar(value='Reading health: not checked')
+        ttk.Label(p,textvariable=self.connection_health,wraplength=740,
+                  font=('Segoe UI',self.accessible_size,'bold')).pack(anchor='w',pady=7)
         ttk.Label(p,text='LibreBeacon only works whilst this Windows app is open and connected. '
                   'Keep your official Libre app and alarms enabled.',wraplength=730).pack(anchor='w')
         self.event_label = tk.StringVar(value='No alerts triggered in this session.')
         ttk.Label(p,textvariable=self.event_label,wraplength=720).pack(anchor='w',pady=18)
+
+    def build_setup(self):
+        p = self.setup
+        ttk.Label(p, text='Start here — set up without editing files',
+                  font=('Segoe UI', 17, 'bold')).pack(anchor='w', pady=8)
+        ttk.Label(p, text='Complete the numbered steps below, use each Test button, '
+                  'and return here to check the saved settings. The app will not turn on '
+                  'automatic warnings or messages for you.', wraplength=750).pack(anchor='w', pady=7)
+        for label, tab in (("1. Connect Home Assistant", self.connection),
+                           ("2. Find and test both sensors", self.sensors),
+                           ("3. Test sound, speech and visual notices", self.access),
+                           ("4. Configure optional smart-home alerts", self.contacts),
+                           ("5. Add and test trusted contacts", self.emergency),
+                           ("6. Set agreed glucose thresholds", self.rules)):
+            ttk.Button(p, text=label, command=lambda target=tab: self.tabs.select(target)).pack(
+                fill='x', anchor='w', pady=2)
+        ttk.Button(p, text='Check Saved Setup', command=self.refresh_setup).pack(anchor='w', pady=10)
+        self.setup_report = tk.StringVar()
+        ttk.Label(p, textvariable=self.setup_report, wraplength=750,
+                  justify='left').pack(anchor='w', pady=5)
+        self.refresh_setup()
+
+    def refresh_setup(self):
+        checks = setup_checks(self.settings, bool(self.session_token or load_token()))
+        lines = [f'{"CONFIGURED" if item.ready else "TO DO"}: {item.title} — {item.explanation}'
+                 for item in checks]
+        lines.append('These checks inspect saved settings, not live medical reliability. '
+                     'Use Test Connection and Test Reading separately.')
+        if hasattr(self, 'setup_report'):
+            self.setup_report.set('\n\n'.join(lines))
+
+    def update_health_display(self):
+        report = self.health.report(datetime.now(timezone.utc), self.settings.freshness_minutes)
+        self.connection_health.set(f'Reading health: {report.state} — {report.detail}')
+        if report.state in ('STALE', 'CLOCK ERROR', 'UNAVAILABLE'):
+            self.number.set('— mmol/L')
+            self.details.set('Live measurement unavailable; check the official Libre app.')
 
     def build_connection(self):
         p = self.connection
@@ -232,6 +279,7 @@ class LibreBeaconApp:
         ttk.Button(bar, text='Add Contact', command=self.add_emergency_route).pack(side='left', padx=3)
         ttk.Button(bar, text='Remove Selected', command=self.remove_emergency_route).pack(side='left', padx=3)
         ttk.Button(bar, text='Test Selected', command=self.test_emergency_route).pack(side='left', padx=3)
+        ttk.Button(bar, text='Record Recipient Reply', command=self.confirm_emergency_route).pack(side='left', padx=3)
         self.emergency_enabled = self.var('enable_emergency_contacts', 'bool')
         self.emergency_consent = self.var('emergency_contact_consent', 'bool')
         self.include_value = self.var('include_glucose_in_messages', 'bool')
@@ -252,7 +300,8 @@ class LibreBeaconApp:
     def refresh_routes(self):
         self.route_list.delete(0, tk.END)
         for route in self.route_records:
-            self.route_list.insert(tk.END, f'{route.label}  •  {route.target}')
+            note = self.deliveries.description(route.target)
+            self.route_list.insert(tk.END, f'{route.label}  •  {route.target}  [{note}]')
 
     def show_mesh_destinations(self):
         matches = [e for e in self.notification_targets if e.startswith('notify.mesh_')]
@@ -302,8 +351,30 @@ class LibreBeaconApp:
         except HomeAssistantError as exc:
             messagebox.showerror('Connection', str(exc)); return
         from .contacts import dispatch_route
-        self.start('emergency_test', lambda:dispatch_route(
-            client, route, 'LibreBeacon TEST ONLY. No glucose emergency has occurred.'))
+        def attempt():
+            try:
+                dispatch_route(client, route, 'LibreBeacon TEST ONLY. No glucose emergency has occurred.')
+                return route.target, True
+            except Exception:
+                return route.target, False
+        self.start('emergency_test', attempt)
+
+    def confirm_emergency_route(self):
+        picked = self.route_list.curselection()
+        if not picked:
+            messagebox.showinfo('Contact confirmation', 'Select a contact first.'); return
+        route = self.route_records[picked[0]]
+        if not messagebox.askyesno('Record a reply',
+            'Have you personally heard back from this recipient by phone or another means? '
+            'This only records what you report; LibreBeacon cannot verify a person saw a message.'):
+            return
+        try:
+            self.deliveries.confirm(route.target)
+        except ValueError as exc:
+            messagebox.showinfo('No successful request yet', str(exc)); return
+        self.refresh_routes()
+        self.status.set('Recipient reply marked manually for this session. '
+                        'This is not an automatic delivery receipt.')
 
     def build_rules(self):
         p=self.rules
@@ -392,6 +463,7 @@ class LibreBeaconApp:
             s=self.collect();self.validate(s)
             s.save();self.settings=s
             self.status.set('Settings saved. Live changes apply on the next reading.')
+            self.refresh_setup()
         except (ValueError, OSError) as exc:
             messagebox.showerror('Check Settings',str(exc))
 
@@ -416,6 +488,7 @@ class LibreBeaconApp:
                 messagebox.showwarning('Token not stored','Token will work for this session only. '
                     'Install keyring and verify that a secure credential backend is available.')
         self.settings.save()
+        self.refresh_setup()
 
     def toggle_enabled(self):
         try:
@@ -473,6 +546,7 @@ class LibreBeaconApp:
             except HomeAssistantError as exc:
                 self.busy_poll=False
                 self.status.set(str(exc))
+        self.update_health_display()
         self.root.after(1000,self.periodic)
 
     def process_queue(self):
@@ -483,6 +557,8 @@ class LibreBeaconApp:
                 if not ok:
                     self.status.set(f'{key}: {result}')
                     if key in ('reading','poll'):
+                        self.health.failure(datetime.now(timezone.utc))
+                        self.update_health_display()
                         self.number.set('— mmol/L')
                         self.details.set('READING UNAVAILABLE — do not rely on this display.')
                     continue
@@ -507,9 +583,20 @@ class LibreBeaconApp:
                 elif key in ('reading','poll'):
                     self.show_reading(*result, allow_alerts=(key == 'poll'))
                 elif key=='emergency_test':
-                    self.status.set('Emergency contact test requested; ask the recipient to confirm receipt.')
+                    destination, accepted = result
+                    self.deliveries.record(destination, accepted=accepted, kind='test')
+                    self.refresh_routes()
+                    self.status.set('Test request accepted; ask the recipient to reply.' if accepted
+                                    else 'Contact test request failed; check destination and Home Assistant.')
                 elif key=='emergency_delivery':
-                    delivered, failed = result
+                    # The service's acknowledgement is not a person's reply.
+                    targets = {r.label: r.target for r in self.route_records}
+                    for label, accepted, _detail in result:
+                        if label in targets:
+                            self.deliveries.record(targets[label], accepted=accepted, kind='critical_low')
+                    self.refresh_routes()
+                    delivered = sum(1 for _, ok, _ in result if ok)
+                    failed = sum(1 for _, ok, _ in result if not ok)
                     self.status.set(f'Contact requests accepted: {delivered}; rejected: {failed}. Receipt remains unconfirmed.')
                 elif key in ('script','test_script'):
                     self.status.set('Home Assistant accepted the script request. Delivery or activation is not confirmed.')
@@ -519,11 +606,15 @@ class LibreBeaconApp:
     def show_reading(self,glucose,timestamp, *, allow_alerts=False):
         try:
             reading=decode_reading(glucose,timestamp)
+            if hasattr(self, 'health'):
+                self.health.success(reading.measured_at, datetime.now(timezone.utc))
             age=reading.age_minutes()
             self.details.set(f'Measured {age:.1f} minutes ago • timestamp from sensor')
             reading.validated(self.settings.freshness_minutes)
             self.number.set(f'{reading.mmol:.1f} mmol/L')
             self.status.set('Reading available and within configured age limit.')
+            if hasattr(self, 'health'):
+                self.update_health_display()
             if not (allow_alerts and self.settings.enabled):return
             # Do not infer fresh glucose data from last_updated: source timestamp only.
             event=self.engine.observe(reading,float(self.settings.low_mmol),
@@ -539,6 +630,8 @@ class LibreBeaconApp:
             self.number.set('— mmol/L')
             self.details.set(f'DATA NOT VERIFIED: {exc}')
             self.status.set('NO GLUCOSE ALERT ISSUED — missing, malformed or stale reading.')
+            if hasattr(self, 'health'):
+                self.update_health_display()
 
     def alert(self,event,message,mmol=None):
         if self.settings.enable_visual:self.popup(f'{event.upper()} READING',message)
@@ -556,8 +649,7 @@ class LibreBeaconApp:
                     results = []
                     dispatch_emergency(routes, client, text,
                                        lambda name, ok, detail: results.append((name, ok, detail)))
-                    return (sum(1 for _, ok, _ in results if ok),
-                            sum(1 for _, ok, _ in results if not ok))
+                    return results
                 self.start('emergency_delivery', send_all)
         elif self.settings.enable_contacts:
             # Older contact scripts stay supported; avoid exposing the actual

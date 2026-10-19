@@ -161,4 +161,6 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(sender.requests,[])
             LibreBeaconApp.alert(dummy,'critical_low','critical',2.3)
         self.assertEqual([x[1] for x in sender.requests],['notify.a'])
-        self.assertEqual(completed,[('emergency_delivery',(1,0))])
+        self.assertEqual(len(completed),1)
+        self.assertEqual(completed[0][0], 'emergency_delivery')
+        self.assertEqual([x[1] for x in completed[0][1]], [True])

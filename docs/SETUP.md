@@ -62,3 +62,13 @@ Return to **5 · Emergency contacts** and tick **Enable automatic critical-low c
 **Old readings:** fix the Libre → phone → LibreLinkUp → Home Assistant path. Do not switch off freshness checks to hide errors.
 
 The program does not monitor anything when closed.
+
+## New in 4.0.6: Start Here and Reading Health
+
+If the options look confusing, open **Start Here**. Each numbered button takes you to one setup section. Work down the page, press **Save** in each section, and use its **Test** button before moving on. Finally press **Check Saved Setup**. "Configured" means the details are filled in; it does **not** mean a test message arrived, and it does not switch on automatic alerts.
+
+The Dashboard now has a **Reading health** line. **CURRENT** means the last reported sensor measurement is within your chosen age limit. **STALE** means it is too old; **UNAVAILABLE** means a recent request failed; **CLOCK ERROR** means the measurement timestamp is too far in the future. The glucose number is hidden for these problem states. A connection problem must not turn into an invented low-glucose alert.
+
+For contacts, go to **5 · Emergency contacts**, select a recipient and press **Test Selected**. The contact list shows *request accepted; delivery unconfirmed* or *request failed*. Ring or speak with the intended recipient to check what arrived. Only then press **Record Recipient Reply**. That confirmation is kept in memory while the app is open, not automatically established by Home Assistant or a radio packet.
+
+If it doesn't work: check the sensor is updating in the official app, that the phone uploads to LibreLinkUp, that Home Assistant displays an actual **measurement timestamp** and the Windows computer is awake. Keep the official Libre alarms on. If a message fails, use your ordinary contact and emergency arrangements rather than waiting for LibreBeacon to recover.

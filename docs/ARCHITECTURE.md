@@ -33,3 +33,11 @@ A new provider should be independently optional. Failure must not halt local ala
 ## Release discipline
 
 Start from v1.9.3 for this development line. Increase versions for changes that genuinely exist, and list those changes in `CHANGELOG.md`. Don't invent intervening releases or claim hardware testing before it happens. The code is intended to welcome contributors who can extend a module without understanding the entire application.
+
+## Version 4.0.6 modules
+
+- `librebeacon/readiness.py`: button-led setup checklist. It checks saved choices only, never pretends to have tested a live service.
+- `librebeacon/health.py`: the measurement clock and request failures. Keep the measured-at time separate from when a successful request returned.
+- `librebeacon/delivery.py`: in-memory outcome labels for configured contact routes. An accepted request is not the same thing as a reply from another person.
+
+The emergency recipient confirmation currently lives only in the Windows session. A future acknowledgement service would need authenticated, deliberate responses and a replay-resistant correlation ID. Don't assume a Meshtastic ACK, an email provider's 200 OK or a Home Assistant script returning successfully means the person has seen the alert. More work here before anybody should depend on it.

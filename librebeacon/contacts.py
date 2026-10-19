@@ -44,6 +44,7 @@ class ContactRoute:
 def read_routes(items: list[dict]) -> list[ContactRoute]:
     routes = []
     seen = set()
+    seen_labels = set()
     for raw in items:
         if not isinstance(raw, dict):
             raise ValueError('Invalid contact record')
@@ -51,7 +52,10 @@ def read_routes(items: list[dict]) -> list[ContactRoute]:
                                    [('label', ''), ('target', ''), ('consent', False), ('enabled', False)]}).validate()
         if route.target in seen:
             raise ValueError(f'Destination {route.target} is already configured. Add it just once.')
+        if route.label.strip().casefold() in seen_labels:
+            raise ValueError('Give each contact a different nickname')
         seen.add(route.target)
+        seen_labels.add(route.label.strip().casefold())
         routes.append(route)
     return routes
 

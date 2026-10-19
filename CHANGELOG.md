@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.0.6 — Guided setup and monitoring status
+
+- Added a **Start Here** screen with large step buttons and a saved-settings checklist. Each option opens its existing setup tab; enabling alerts remains a separate choice.
+- Added live reading-health notices with distinct current, stale, unavailable and clock-error states. A reading is hidden when it expires, even if the Windows application is still open.
+- Added per-contact test results in the emergency contact list. An accepted service request remains labelled *delivery unconfirmed* until someone manually records an actual reply.
+- Added a separate **Record Recipient Reply** control. Confirmation is local to the current session, deliberately not a delivery claim.
+- Added distinct-contact-name checks to avoid confusing one recipient with another in the activity list.
+- Expanded offline coverage to 51 tests and checked the full nine-tab interface in a Linux virtual display.
+- Updated setup, accessibility and contributor guides. Real-device and Windows validation are still required.
+
 ## 1.9.3 — Accessible contacts and setup
 
 - Added a dedicated button-led emergency contact screen, including Add, Remove, Test Selected, Find Destinations, Show Mesh Nodes and help.
