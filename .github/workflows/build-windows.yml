@@ -2,6 +2,8 @@ name: Windows package
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 jobs:
@@ -18,7 +20,14 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Build executable
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name LibreBeacon --collect-all keyring librebeacon_launcher.py
+      - name: Build per-user installer
+        run: |
+          choco install nsis --yes --no-progress
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" installer\LibreBeacon.nsi
       - uses: actions/upload-artifact@v4
         with:
           name: LibreBeacon-Windows-unsigned
-          path: dist/LibreBeacon.exe
+          path: |
+            dist/LibreBeacon.exe
+            dist/LibreBeacon-Setup-v*.exe
+          if-no-files-found: error

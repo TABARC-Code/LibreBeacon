@@ -1,74 +1,36 @@
-# LibreBeacon setup — a practical guide
+# Start here: Windows and Home Assistant
 
-This is written for the person using the app, not someone who likes editing configuration files.
+## Option A — Windows setup package (no Python installation)
 
-## What you need
+1. Visit the [Windows package workflow](https://github.com/TABARC-Code/LibreBeacon/actions/workflows/build-windows.yml). Choose a successful run for the release you want.
+2. Download its **LibreBeacon-Windows-unsigned** artefact, unzip it and find `LibreBeacon-Setup-v4.2.0.exe`.
+3. Check the version and source. The package is **unsigned** and has not been tested on your Windows hardware. Don't dismiss a security warning without deciding if you trust the code and the build.
+4. Open the setup program, choose an install folder if you wish, and finish. You'll find LibreBeacon in the Windows Start menu. No administrator access is needed.
+5. Open **Start Here** and follow the numbered buttons. The program does not automatically begin warning or contacting anyone.
 
-A Windows 10 or 11 PC; a working Libre sensor and approved phone app with the official alarms left on; Home Assistant already running; an existing community LibreLinkUp-to-Home Assistant integration; and Home Assistant login access. The PC must remain awake and connected for the extra alerts to run. A separate notification setup is needed if you want texts, emails, smart lights or Meshtastic messages.
+If no successful Windows package is available, use the source installation below. The installer requires an existing LibreLinkUp integration in Home Assistant; it cannot set up Abbott sharing on your behalf.
 
-Nothing in this guide replaces medical advice. Set thresholds with the person and their healthcare professional. Don't use someone else's values just because they appear in an online example.
+## Option B — Install from the source folder
 
-## First-time installation
+Extract the source ZIP to a folder, install Python 3.11 or newer, and double-click `INSTALL-WINDOWS.bat`. Then use `run-windows.bat` to open the app. Internet access is required to install dependencies. This route is useful for contributors, not necessary once a tested Windows package is available.
 
-1. Extract the ZIP. Don't run files straight from inside the ZIP.
-2. If necessary, install Python 3.11 or newer from [python.org](https://www.python.org/downloads/windows/), with the Python launcher enabled.
-3. Double-click `INSTALL-WINDOWS.bat` once. It may need a network connection to install a Python library.
-4. Double-click `run-windows.bat` and keep LibreBeacon open during setup.
-5. The **Dashboard** should initially show **Reading unavailable**. That's expected until you finish the connection and sensor steps.
+## Numbered setup buttons
 
-## Button 1 — Connect Home Assistant
+1. **Connection** — enter the Home Assistant base URL and a long-lived access token, choose Save, then Test. Tokens are kept in the Windows credential store, not the ordinary settings JSON. **Forget Saved Token** clears it locally and pauses supplementary alerts; revoke it in Home Assistant separately if necessary.
+2. **Sensors** — Find Sensors, choose glucose and **actual measurement timestamp**, then Save and Test Reading. Never use Home Assistant `last_updated` as if it were a new Libre measurement.
+3. **Accessibility** — choose your local sound pattern, voice and visual choices. Steady visual notices are the default. Save, then test. Select motion only if suitable for the person using the system.
+4. **Alerts** — choose compatible Home Assistant scripts for lights or optional notifications, then test explicitly.
+5. **Emergency contacts** — Find Destinations; add consented people one at a time. Test Selected sends a real **test** request only after confirmation. Check Contact Delivery Status tells you which requests were accepted, not whether a person read one. Call the recipient to verify.
+6. **Alert rules** — set low, high, critical-low if required, age limit and poll interval with the intended user's clinical guidance. Save, then return to Dashboard and enable supplementary alerts only once the tests make sense.
 
-In Home Assistant, open your user profile and create a **long-lived access token**. Copy it. In LibreBeacon choose **1 · Connection**, enter your server address (for example `http://homeassistant.local:8123`) and the token. Press **Save Connection**, then **Test Connection**. Keep the token private; never paste it into a screenshot or share it online. On an untrusted network, use a properly secured HTTPS connection.
+**Keyboard:** F1 opens setup; Ctrl+1 to Ctrl+9 selects tabs. More detailed screen-reader verification remains to be done on actual Windows equipment.
 
-## Button 2 — Select readings
+## Common traps
 
-Open **2 · Sensors** and press **Find Sensors**. Choose the glucose value and the **actual sensor measurement time**. It isn't enough to choose Home Assistant's `last_updated` time — that field can refresh even when the phone hasn't supplied a new measurement. Press **Save Sensor Selection**, then **Test Reading**. If a reading is old or missing, the big number should disappear rather than appear safe.
+- No result? Confirm the Libre app itself has a current reading, LibreLinkUp is sharing, and Home Assistant displays the actual measurement time.
+- Sounds not heard? Check Windows output device, volume, speakers and power. A successful sound-button press doesn't mean anyone heard it.
+- Email, Meshtastic and other messages rely on working Home Assistant destinations. The application doesn't create these accounts or verify a final recipient received a message.
+- Laptop closed, sleeping, rebooting or offline? LibreBeacon does not monitor reliably during those conditions. Keep the official Libre warnings and existing arrangements active.
+- Uninstalling removes the program and shortcuts; settings in the Windows user profile and credential-store entries are deliberately preserved. Use **Forget Saved Token** first to remove the local credential, and revoke it in Home Assistant as appropriate.
 
-## Button 3 — Test local warnings
-
-In **3 · Accessibility**, test the audible sound, offline Windows speech and visual notice separately. Check actual volume on the device the person uses, including after the PC is locked or resumes from sleep. Don't assume the speech worked just because a button was pressed. The built-in notice pulses gently, but any flashing may be unsuitable for people with photosensitivity. The local visual notice can be switched off.
-
-## Button 4 — Lights and ordinary contact scripts
-
-If you already have scripts in Home Assistant, choose one in **4 · Alerts**, press **Find Home Assistant Scripts**, then run the clearly labelled test. A script can switch a particular smart bulb on or send a message. Home Assistant must know how that script works. See the examples and test the full process at the intended device.
-
-## Button 5 — Emergency contacts
-
-In **5 · Emergency contacts**, press **Find Destinations**. Enter a short nickname, choose one destination, tick the person's consent and press **Add Contact**. Repeat for a second person if wanted. Press **Save Emergency Contact Settings**.
-
-Select one contact and press **Test Selected**. This really sends a test request; warn the person first and ask them to confirm receipt. It is especially worth testing after a router restart, a Home Assistant update and any new phone purchase.
-
-You can use an existing `notify.*` destination or `script.*` script. If a Meshtastic gateway is connected to Home Assistant, use **Show Mesh Nodes** to filter the list. Avoid choosing a channel-wide broadcast. There is a [separate guide](CONTACTS_AND_MESHTASTIC.md) for connecting email, a phone or a radio node.
-
-## Button 6 — Alert thresholds
-
-In **6 · Alert rules**, enter the person's own low and high values, then (optionally) a *lower* critical-low value to trigger the extra emergency contacts. All numbers are in **mmol/L**. Nothing is filled in automatically. Set the age limit for the sensor reading and check interval, then press **Save and Validate Alert Rules**.
-
-Return to **5 · Emergency contacts** and tick **Enable automatic critical-low contact messages** only after every contact route has been tested and the person agrees. Tick the delivery/consent statement. Save again. Lastly, enable supplementary alerts on **Dashboard**.
-
-## Things to test before someone uses it
-
-- Simulate a test using the labelled test buttons. Confirm the intended light, sound and recipient actually respond.
-- Shut down Home Assistant temporarily. Check the software reports unavailable data; it mustn't keep showing an old glucose value as if it were current.
-- Check Wi-Fi loss, Windows sleep, network changes, muted sound and a powered-off smart device. Some failures may not raise a separate alarm.
-- Keep a non-computer route for actual assistance. LibreBeacon doesn't call the emergency services and cannot guarantee a message or acknowledgement.
-
-## If nothing happens
-
-**No connection:** check the URL, the Home Assistant token and the network.  
-**No sensors:** check that LibreLinkUp is updating Home Assistant.  
-**No sound:** check Windows output device, app volume and speech components.  
-**No contacts:** the contact channel must already exist in Home Assistant. Selecting `notify.*` does not automatically create a phone or email service.  
-**Old readings:** fix the Libre → phone → LibreLinkUp → Home Assistant path. Do not switch off freshness checks to hide errors.
-
-The program does not monitor anything when closed.
-
-## New in 4.0.6: Start Here and Reading Health
-
-If the options look confusing, open **Start Here**. Each numbered button takes you to one setup section. Work down the page, press **Save** in each section, and use its **Test** button before moving on. Finally press **Check Saved Setup**. "Configured" means the details are filled in; it does **not** mean a test message arrived, and it does not switch on automatic alerts.
-
-The Dashboard now has a **Reading health** line. **CURRENT** means the last reported sensor measurement is within your chosen age limit. **STALE** means it is too old; **UNAVAILABLE** means a recent request failed; **CLOCK ERROR** means the measurement timestamp is too far in the future. The glucose number is hidden for these problem states. A connection problem must not turn into an invented low-glucose alert.
-
-For contacts, go to **5 · Emergency contacts**, select a recipient and press **Test Selected**. The contact list shows *request accepted; delivery unconfirmed* or *request failed*. Ring or speak with the intended recipient to check what arrived. Only then press **Record Recipient Reply**. That confirmation is kept in memory while the app is open, not automatically established by Home Assistant or a radio packet.
-
-If it doesn't work: check the sensor is updating in the official app, that the phone uploads to LibreLinkUp, that Home Assistant displays an actual **measurement timestamp** and the Windows computer is awake. Keep the official Libre alarms on. If a message fails, use your ordinary contact and emergency arrangements rather than waiting for LibreBeacon to recover.
+For extra advice see [contacts and Meshtastic](CONTACTS_AND_MESHTASTIC.md), [accessibility](ACCESSIBILITY.md), and the [safety notice](../DISCLAIMER.md).

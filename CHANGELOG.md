@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.2.0 — Windows packaging and accessibility controls
+
+- Added per-user NSIS installer source and Windows CI packaging for unsigned setup and executable artefacts.
+- Made desktop visual alerts steady by default. Background pulses now require an explicit choice.
+- Added three short, selectable Windows sound patterns and kept playback off the main UI thread.
+- Added F1 setup shortcut and Ctrl+1 through Ctrl+9 tab navigation.
+- Added per-contact last-request time, outcome summary and redacted error categories.
+- Added a button to forget the locally stored Home Assistant token without silently deleting settings.
+- Validation now rejects emergency messaging when no configured recipient is actually enabled.
+- Updated beginner guides, developer notes and offline regression tests. Real Windows hardware and medical-service verification remain outstanding.
+
+
 ## 4.0.6 — Guided setup and monitoring status
 
 - Added a **Start Here** screen with large step buttons and a saved-settings checklist. Each option opens its existing setup tab; enabling alerts remains a separate choice.

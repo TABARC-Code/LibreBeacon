@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.0.6** · experimental community prototype · MIT licence
+Current version: **4.2.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -11,6 +11,17 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 
 ## Start on Windows
 
+**Easiest route:** after the Windows package workflow finishes, download
+`LibreBeacon-Setup-v4.2.0.exe` from its GitHub Actions artefact. Double-click it,
+follow the installer, then open LibreBeacon from the Start menu. This is an
+**unsigned experimental build**: Windows may warn you, and it has **not** been
+verified on a real Windows computer. Don't bypass warnings without checking the
+source and deciding whether you trust the build. The program starts with all
+supplementary warnings and emergency messages switched off. You still need Home
+Assistant and an existing LibreLinkUp connection.
+
+**From source, without the installer:**
+
 1. Install [Python 3.11 or later](https://www.python.org/downloads/windows/) if your computer doesn't already have it. During installation ensure the Windows Python Launcher is available.
 2. Extract the project ZIP into a normal folder such as **Documents → LibreBeacon**.
 3. Double-click **`INSTALL-WINDOWS.bat`**. It creates an isolated local installation and installs the necessary dependency. Internet access is required for this first step.
@@ -18,7 +29,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 5. Open **Start Here** and use the large numbered setup buttons. Return there and choose **Check Saved Setup** to see what still needs configuring.
 6. Follow the numbered tabs. No terminal commands or code editing are required inside the app, although Home Assistant and its integrations must already be configured.
 
-There is also a developer build script and a GitHub Actions recipe for an unsigned Windows `.exe`. **No tested `.exe` is included in this ZIP.** See [the complete setup guide](docs/SETUP.md).
+A Windows build workflow now also packages a per-user installer. **No tested Windows executable is included in the source ZIP.** See [the complete setup guide](docs/SETUP.md).
 
 ## What you can configure
 
@@ -26,11 +37,11 @@ There is also a developer build script and a GitHub Actions recipe for an unsign
 | --- | --- |
 | Dashboard | Check reading and connection health, open setup, switch supplementary alerts on/off |
 | Start Here | Step-by-step setup buttons and saved-configuration checklist |
-| Connection | Save connection, test connection, open Home Assistant |
+| Connection | Save connection, test connection, open Home Assistant, forget saved token |
 | Sensors | Find glucose sensors, select measurement timestamp, test reading |
-| Accessibility | Test sound, spoken message, visual notice; larger text |
+| Accessibility | Choose and test one of three audible patterns; steady visual notice by default, optional slow pulse; larger text |
 | Alerts | Select and test a Home Assistant lighting script; older contact-script support |
-| Emergency contacts | Find destinations, Show Mesh Nodes, Add, Remove, Test Selected, Record Recipient Reply, Save, Help |
+| Emergency contacts | Find destinations, Show Mesh Nodes, Add, Remove, Test Selected, Check Contact Delivery Status, Record Recipient Reply, Save, Help |
 | Alert rules | Set ordinary low and high thresholds, optional critical-low threshold, age and check interval |
 
 **Contact sending is off by default.** Consent is required for every recipient and for enabling automatic critical-low messages. Thresholds deliberately have no default. A configured critical-low alert is distinct from an ordinary low alert, so a reading moving into the critical band can generate an additional event even during an existing low episode. Multiple contact requests are attempted independently; a failed request to one destination need not stop another. That still doesn't confirm actual delivery.
@@ -92,3 +103,28 @@ This update brings the accessibility and contact features together in one Window
 - **More tests and guides:** expanded offline checks for setup, contact requests, timestamps and connection failures.
 
 **Remaining work:** full Windows/device testing, delivery confirmation from independent channels, an easier installer and genuinely unattended monitoring. Keep the official Libre alarms enabled.
+
+## Version 4.2.0 — Desktop accessibility and Windows packaging
+
+- **Windows installer source:** added a per-user setup package built with NSIS. It installs an app shortcut and a proper uninstaller without administrator access or automatic startup. Settings aren't wiped by uninstall.
+- **Accessible notice controls:** visual alerts stay steady unless someone deliberately enables a slow background pulse. Three short local sound patterns are available, with a Test button.
+- **Keyboard:** F1 goes to setup; Ctrl+1 through Ctrl+9 selects the relevant tab. The Tk interface still needs screen-reader checks on an actual Windows machine.
+- **Contact diagnostics:** display the time and last request outcome per contact. Only a restricted error category is shown; don't print service responses, glucose or tokens into diagnostics.
+- **Credential control:** a button removes the stored Home Assistant token and pauses supplementary monitoring. The token must also be revoked in Home Assistant if it should no longer work.
+- **Checks:** additional offline tests for motion defaults, audio patterns, route validation and privacy-conscious errors. This doesn't count as real speaker or notification delivery testing.
+
+### Working notes: problem ↔ idea ↔ next check
+
+| What we've noticed | Current choice | Worth trying next |
+| --- | --- | --- |
+| Some people don't see a colour change, others can't tolerate a flashing light. | Text-first warning, steady by default; motion is optional. | Try with several users, including screen readers and photosensitivity constraints; don't claim WCAG compliance from font size alone. |
+| A speaker can be unplugged, muted or connected to the wrong output. | Short, selectable patterns; sound test independent of glucose alerts. | Add an output-device selector and a way to confirm the sound was *heard*, not just requested. |
+| Messages vanish into the world; an HTTP success is not someone's response. | Per-contact request status and manual reply. | Look at authenticated acknowledgements and escalation windows, then test with consenting people. Transport acknowledgement alone won't do. |
+| Laptop sleeps. Monitoring stops. | Always say the app must remain open and awake. | Investigate an optional Home Assistant-side watcher. Need duplicate-alert suppression across machines before enabling it. |
+| The installer may make first launch easier; it doesn't configure Home Assistant. | Start Here buttons, source build alternative, per-user installer. | Try with a complete beginner, from download to first **test-only** alert. Note every point where they get lost. |
+
+The notes above should keep moving in both directions: when a contributor solves a
+problem, update the relevant code comment and this table; when testing reveals a
+new limitation, put it here and link it back to the module. A useful paper trail is
+what actually changed, what was checked, and what still looks shaky. No invented
+results, please.

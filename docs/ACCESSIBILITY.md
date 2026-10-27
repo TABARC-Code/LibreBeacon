@@ -22,3 +22,11 @@ The most useful accessibility work would be: proper labelled focus order, keyboa
 The **Start Here** tab provides large individual setup buttons, and the Dashboard's **Reading health** label uses words as well as state rather than colour alone. A missing or stale reading is shown as an em dash, not an old value. Contact attempt labels likewise distinguish a request being accepted from a manually confirmed human reply.
 
 Try every output with the actual person and their assistive equipment. Test at a comfortable volume, test both normal and high-contrast Windows settings, and confirm whether slow light pulses are suitable for the household. Switching on large text does not guarantee screen-reader compatibility. Let the person decide which alerts they want, then test them with someone present.
+
+## Notes for 4.2.0
+
+The local visual warning is **steady** unless the person explicitly opts into slow background pulses. No alarm should be identifiable by colour alone: the text says what happened, and the number disappears when no reliable current reading exists. Test a real screen-reader, keyboard-only navigation and magnifier setup; these tests remain outstanding.
+
+**Sound pattern** offers Gentle, Standard and Distinct. These aren't volume presets and they aren't certified emergency tones. Sound tests are local to Windows, short and bounded, but muted devices, audio focus, unplugged speakers or hearing aids may change what's actually heard. Use the Test button, then check with the person.
+
+**Keyboard:** F1 opens setup. Ctrl+1…Ctrl+9 selects the tabs. Test what happens when the app has focus, loses focus or the computer wakes up. We still don't have evidence of a reliable wake-from-sleep alert.

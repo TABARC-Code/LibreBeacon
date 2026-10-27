@@ -41,3 +41,13 @@ Start from v1.9.3 for this development line. Increase versions for changes that 
 - `librebeacon/delivery.py`: in-memory outcome labels for configured contact routes. An accepted request is not the same thing as a reply from another person.
 
 The emergency recipient confirmation currently lives only in the Windows session. A future acknowledgement service would need authenticated, deliberate responses and a replay-resistant correlation ID. Don't assume a Meshtastic ACK, an email provider's 200 OK or a Home Assistant script returning successfully means the person has seen the alert. More work here before anybody should depend on it.
+
+## 4.2.0: code notes that go both ways
+
+- `outputs.py`: sound-pattern definitions should be easy to replace without changing the alert engine. Keep patterns short; if a contributor wants repeating sound, first design a deliberate stop/acknowledgement and a fatigue test. No endless siren loop.
+- `delivery.py`: only keeps the last attempt per destination in memory. A small session-only log may help diagnose intermittent connections, but weigh it against personal data exposure. Never dump tokens or HTTP bodies for convenience.
+- `settings.py`: new accessibility preferences have safe defaults, so older user settings still load. If a future schema migration is needed, preserve consent state conservatively; don't silently switch messaging on.
+- `app.py`: the Tk widgets remain simple on purpose, but the large settings screens may need scrolling or a proper accessibility toolkit once tested with screen readers and keyboard navigation.
+- `installer/LibreBeacon.nsi`: installs only under the current user's profile, does not require admin and does not add startup tasks. Don't introduce automatic monitoring at login without explicit user action and clear health-of-service reporting.
+
+Working rule: update the README's *noticed → choice → next check* table when a test confirms or disproves one of these thoughts. Changes in source should point back to actual field observations when there are any. No assumptions about a successful phone message just because a REST request returned 200.

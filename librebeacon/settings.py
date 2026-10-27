@@ -20,6 +20,8 @@ class Settings:
     enabled: bool = False
     enable_sound: bool = True
     enable_visual: bool = True
+    pulse_visual: bool = False  # Steady is safer for people sensitive to motion.
+    sound_style: str = "Standard"
     enable_speech: bool = False
     enable_ha_visual: bool = False
     enable_contacts: bool = False
@@ -58,6 +60,13 @@ class Settings:
 def save_token(token: str) -> None:
     import keyring
     keyring.set_password(SECRET_SERVICE, SECRET_USER, token)
+
+
+def delete_token() -> None:
+    """Forget this Windows login's stored token, leaving other credentials alone."""
+    import keyring
+    if keyring.get_password(SECRET_SERVICE, SECRET_USER):
+        keyring.delete_password(SECRET_SERVICE, SECRET_USER)
 
 
 def load_token() -> str:

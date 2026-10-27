@@ -105,7 +105,7 @@ class DeliveryTests(unittest.TestCase):
         d=DeliveryTracker()
         d.record('notify.neighbour',accepted=True,kind='test')
         self.assertEqual(set(vars(d.attempts['notify.neighbour'])),
-                         {'accepted','kind','confirmed_manually'})
+                         {'accepted','kind','confirmed_manually','attempted_at','error_type'})
 
 
 if __name__ == '__main__':

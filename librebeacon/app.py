@@ -4,14 +4,15 @@ from datetime import datetime, timezone
 from queue import Queue, Empty
 from threading import Thread
 import time
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 import webbrowser
 
 from .core import AlertEngine, ReadingError, decode_reading
 from .homeassistant import HomeAssistant, HomeAssistantError
-from .outputs import beep, start_speech
-from .settings import Settings, save_token, load_token
+from .outputs import start_beep, start_speech, SOUND_PATTERNS
+from .settings import Settings, save_token, load_token, delete_token
 from .contacts import ContactRoute, read_routes, emergency_message, dispatch_emergency
 from .readiness import setup_checks
 from .health import ConnectionHealth
@@ -25,6 +26,8 @@ class LibreBeaconApp:
         self.root = root
         root.title(f'LibreBeacon {__version__} — Accessibility Companion (experimental)')
         root.minsize(920, 710)
+        # F1 and Ctrl+number should remain usable without a mouse. Still needs
+        # a proper screen-reader pass on Windows; keyboard access isn't the lot.
         try:
             self.settings = Settings.load()
         except (OSError, ValueError, TypeError):
@@ -48,6 +51,10 @@ class LibreBeaconApp:
         self.notification_targets = []
         self.accessible_size = 15 if self.settings.large_text else 11
         self.build()
+        root.bind('<F1>', lambda event: self.tabs.select(self.setup))
+        for index in range(1, 10):
+            root.bind(f'<Control-Key-{index}>',
+                      lambda event, pos=index-1: self.tabs.select(pos))
         root.after(250, self.process_queue)
         root.after(1000, self.periodic)
 
@@ -181,6 +188,7 @@ class LibreBeaconApp:
         ttk.Button(bar,text='Save Connection',command=self.save_connection).pack(side='left',padx=4)
         ttk.Button(bar,text='Test Connection',command=self.test_connection).pack(side='left',padx=4)
         ttk.Button(bar,text='Open Home Assistant',command=self.open_ha).pack(side='left',padx=4)
+        ttk.Button(bar,text='Forget Saved Token',command=self.forget_token).pack(side='left',padx=4)
         box2=ttk.LabelFrame(p,text='Optional Windows Phone Link',padding=14)
         box2.pack(fill='x',pady=18)
         ttk.Label(box2,text='Phone Link can mirror notifications, but does not provide a supported API '
@@ -210,8 +218,14 @@ class LibreBeaconApp:
         box=ttk.LabelFrame(p,text='Step 3 — Local accessibility',padding=14)
         box.pack(fill='x')
         for name,label in [('enable_sound','Audible warning tone'),('enable_speech','Spoken warning (Windows offline speech)'),
-                           ('enable_visual','Large visual warning with slow colour pulses'),('large_text','Large text')]:
+                           ('enable_visual','Large, steady visual warning'),('pulse_visual','Optional slow background pulse (check photosensitivity)'),('large_text','Large text')]:
             ttk.Checkbutton(box,text=label,variable=self.var(name,'bool')).pack(anchor='w',pady=5)
+        self.sound_choice = self.var('sound_style')
+        sound_row = ttk.Frame(box)
+        sound_row.pack(fill='x', pady=6)
+        ttk.Label(sound_row, text='Alert sound pattern').pack(side='left', padx=(0, 12))
+        ttk.Combobox(sound_row, textvariable=self.sound_choice,
+                     values=list(SOUND_PATTERNS), state='readonly', width=24).pack(side='left')
         bar=ttk.Frame(box)
         bar.pack(fill='x',pady=10)
         ttk.Button(bar,text='Test Audible Alarm',command=self.test_sound).pack(side='left',padx=4)
@@ -219,7 +233,8 @@ class LibreBeaconApp:
         ttk.Button(bar,text='Test Visual Alert',command=self.test_visual).pack(side='left',padx=4)
         ttk.Button(box,text='Save Accessibility Settings',command=self.save_general).pack(anchor='w',pady=5)
         ttk.Label(box,text='Large-text changes take effect after restarting the application. '
-                  'Flashing uses slow pulses; use steady-only visual alerts if flashing is unsuitable.',
+                  'Steady notices are the default. The optional pulse is not suitable for everybody. '
+                  'Keyboard: F1 opens setup; Ctrl+1 to Ctrl+9 changes tabs.',
                   wraplength=720).pack(anchor='w',pady=8)
 
     def build_contacts(self):
@@ -273,13 +288,21 @@ class LibreBeaconApp:
                                      width=47, choices=[])
         ttk.Checkbutton(box, text='This contact has agreed to receive tests and critical-low messages',
                         variable=self.route_consent).pack(anchor='w', pady=4)
-        bar = ttk.Frame(box); bar.pack(anchor='w', pady=5)
+        # Two rows. Six buttons on one row looked tidy on a big monitor, but
+        # they simply disappear off the edge when Windows text is scaled up.
+        bar = ttk.Frame(box); bar.pack(anchor='w', pady=4)
         ttk.Button(bar, text='Find Destinations', command=self.find_sensors).pack(side='left', padx=3)
         ttk.Button(bar, text='Show Mesh Nodes', command=self.show_mesh_destinations).pack(side='left', padx=3)
         ttk.Button(bar, text='Add Contact', command=self.add_emergency_route).pack(side='left', padx=3)
-        ttk.Button(bar, text='Remove Selected', command=self.remove_emergency_route).pack(side='left', padx=3)
-        ttk.Button(bar, text='Test Selected', command=self.test_emergency_route).pack(side='left', padx=3)
-        ttk.Button(bar, text='Record Recipient Reply', command=self.confirm_emergency_route).pack(side='left', padx=3)
+        another = ttk.Frame(box); another.pack(anchor='w', pady=4)
+        ttk.Button(another, text='Remove Selected', command=self.remove_emergency_route).pack(side='left', padx=3)
+        ttk.Button(another, text='Test Selected', command=self.test_emergency_route).pack(side='left', padx=3)
+        ttk.Button(another, text='Record Recipient Reply', command=self.confirm_emergency_route).pack(side='left', padx=3)
+        ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
+        self.delivery_report = tk.StringVar()
+        ttk.Label(box, textvariable=self.delivery_report, wraplength=790,
+                  justify='left').pack(anchor='w', pady=3)
+        self.refresh_routes()
         self.emergency_enabled = self.var('enable_emergency_contacts', 'bool')
         self.emergency_consent = self.var('emergency_contact_consent', 'bool')
         self.include_value = self.var('include_glucose_in_messages', 'bool')
@@ -302,6 +325,8 @@ class LibreBeaconApp:
         for route in self.route_records:
             note = self.deliveries.description(route.target)
             self.route_list.insert(tk.END, f'{route.label}  •  {route.target}  [{note}]')
+        if hasattr(self, 'delivery_report'):
+            self.delivery_report.set(self.deliveries.summary([r.target for r in self.route_records]))
 
     def show_mesh_destinations(self):
         matches = [e for e in self.notification_targets if e.startswith('notify.mesh_')]
@@ -354,9 +379,9 @@ class LibreBeaconApp:
         def attempt():
             try:
                 dispatch_route(client, route, 'LibreBeacon TEST ONLY. No glucose emergency has occurred.')
-                return route.target, True
-            except Exception:
-                return route.target, False
+                return route.target, True, ''
+            except Exception as exc:
+                return route.target, False, exc.__class__.__name__
         self.start('emergency_test', attempt)
 
     def confirm_emergency_route(self):
@@ -408,7 +433,7 @@ class LibreBeaconApp:
     def collect(self):
         from dataclasses import fields
         bool_names={'enabled','enable_sound','enable_visual','enable_speech','enable_ha_visual',
-                    'enable_contacts','contact_consent','large_text',
+                    'enable_contacts','contact_consent','large_text','pulse_visual',
                     'enable_emergency_contacts','emergency_contact_consent','include_glucose_in_messages'}
         int_names={'freshness_minutes','poll_seconds','cooldown_minutes'}
         values={}
@@ -422,6 +447,8 @@ class LibreBeaconApp:
 
     @staticmethod
     def validate(s: Settings, require_enabled: bool = False):
+        if s.sound_style not in SOUND_PATTERNS:
+            raise ValueError('Choose an available sound pattern')
         if not 3 <= s.freshness_minutes <= 60:
             raise ValueError('Reading age must be 3–60 minutes')
         if not 30 <= s.poll_seconds <= 900:
@@ -431,8 +458,8 @@ class LibreBeaconApp:
         from .contacts import read_routes
         routes = read_routes(s.emergency_routes)
         if s.enable_emergency_contacts:
-            if not s.emergency_contact_consent or not routes:
-                raise ValueError('Add consented emergency contacts and accept the contact delivery warning')
+            if not s.emergency_contact_consent or not any(r.enabled and r.consent for r in routes):
+                raise ValueError('Enable at least one consented contact and accept the delivery warning')
             if not s.critical_low_mmol:
                 raise ValueError('Set a critical-low threshold before enabling emergency messages')
         if s.critical_low_mmol:
@@ -489,6 +516,30 @@ class LibreBeaconApp:
                     'Install keyring and verify that a secure credential backend is available.')
         self.settings.save()
         self.refresh_setup()
+
+    def forget_token(self):
+        if not messagebox.askyesno('Forget connection token',
+            "Remove this PC account's saved Home Assistant token and pause supplementary alerts? "
+            'This does not revoke the token in Home Assistant itself.'):
+            return
+        try:
+            delete_token()
+        except Exception:
+            messagebox.showerror('Token', 'Could not remove the token from the Windows credential store.')
+            return
+        self.session_token = ''
+        self.token_var.set('')
+        self.settings.enabled = False
+        self.enable.set(False)
+        try:
+            self.settings.save()
+        except OSError:
+            messagebox.showwarning('Settings', 'Token removed, but alert settings could not be saved.')
+        self.refresh_setup()
+        if os.getenv('LIBREBEACON_HA_TOKEN'):
+            self.status.set('Saved token removed, but an environment token is still set. Remove it separately.')
+        else:
+            self.status.set('Saved token removed. Supplementary alerts paused.')
 
     def toggle_enabled(self):
         try:
@@ -583,17 +634,19 @@ class LibreBeaconApp:
                 elif key in ('reading','poll'):
                     self.show_reading(*result, allow_alerts=(key == 'poll'))
                 elif key=='emergency_test':
-                    destination, accepted = result
-                    self.deliveries.record(destination, accepted=accepted, kind='test')
+                    destination, accepted, failure = result
+                    self.deliveries.record(destination, accepted=accepted, kind='test',
+                                           error_type=failure)
                     self.refresh_routes()
                     self.status.set('Test request accepted; ask the recipient to reply.' if accepted
                                     else 'Contact test request failed; check destination and Home Assistant.')
                 elif key=='emergency_delivery':
                     # The service's acknowledgement is not a person's reply.
                     targets = {r.label: r.target for r in self.route_records}
-                    for label, accepted, _detail in result:
+                    for label, accepted, detail in result:
                         if label in targets:
-                            self.deliveries.record(targets[label], accepted=accepted, kind='critical_low')
+                            self.deliveries.record(targets[label], accepted=accepted,
+                                                   kind='critical_low', error_type=detail if not accepted else '')
                     self.refresh_routes()
                     delivered = sum(1 for _, ok, _ in result if ok)
                     failed = sum(1 for _, ok, _ in result if not ok)
@@ -635,7 +688,7 @@ class LibreBeaconApp:
 
     def alert(self,event,message,mmol=None):
         if self.settings.enable_visual:self.popup(f'{event.upper()} READING',message)
-        if self.settings.enable_sound:beep()
+        if self.settings.enable_sound:start_beep(self.settings.sound_style)
         if self.settings.enable_speech:start_speech(message)
         if self.settings.enable_ha_visual:self.send_script(self.settings.visual_script,event,message)
         if event == 'critical_low' and self.settings.enable_emergency_contacts:
@@ -675,12 +728,21 @@ class LibreBeaconApp:
             colour='#351016' if step%2 else '#7c1820'
             pop.configure(bg=colour);lab.configure(bg=colour)
             pop.after(1100, lambda:pulse(step+1))
-        pulse()
+        # Some people find moving backgrounds worse than no alert at all.
+        # Test uses the screen's current selection, not yesterday's saved one.
+        wants_pulse = (self.variables['pulse_visual'].get() if title == 'TEST ONLY'
+                       and 'pulse_visual' in self.variables else self.settings.pulse_visual)
+        if wants_pulse:
+            pulse()
 
     def test_sound(self):
-        beep()
-        if not (self.settings.enable_sound):
-            self.status.set('Test tone requested, even though sound is currently disabled for automatic alerts.')
+        chosen = self.sound_choice.get() if hasattr(self, 'sound_choice') else self.settings.sound_style
+        try:
+            start_beep(chosen)
+        except ValueError as exc:
+            messagebox.showerror('Sound pattern', str(exc)); return
+        self.status.set('Sound test requested. Check the chosen Windows output device and volume. '
+                        'A requested sound is not proof it was audible.')
 
     def test_speech(self):
         start_speech('This is a test of the LibreBeacon spoken notification.')
