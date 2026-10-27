@@ -17,6 +17,7 @@ from .contacts import ContactRoute, read_routes, emergency_message, dispatch_eme
 from .readiness import setup_checks
 from .health import ConnectionHealth
 from .delivery import DeliveryTracker
+from .meshtastic import discover_mesh_choices, is_mesh_entity, require_mesh_choice
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -49,6 +50,7 @@ class LibreBeaconApp:
             self.settings.enable_emergency_contacts = False
             self.settings.emergency_routes = []
         self.notification_targets = []
+        self.mesh_choices = []
         self.accessible_size = 15 if self.settings.large_text else 11
         self.build()
         root.bind('<F1>', lambda event: self.tabs.select(self.setup))
@@ -316,8 +318,8 @@ class LibreBeaconApp:
         ttk.Button(helpbar, text='Save Emergency Contact Settings', command=self.save_general).pack(side='left', padx=3)
         ttk.Button(helpbar, text='Help Choosing a Destination', command=self.contact_help).pack(side='left', padx=3)
         ttk.Label(box, text='Meshtastic: install the Meshtastic integration in Home Assistant, '
-                  'select an individual notify.mesh_* destination rather than a broadcast channel, '
-                  'then test it with the recipient. No message guarantees someone has received it.',
+                  'press Find Destinations, then Show Mesh Nodes. Only likely personal nodes are listed; '
+                  'confirm the intended person and run a test. Radio receipt is never proof of a reply.',
                   wraplength=790).pack(anchor='w', pady=4)
 
     def refresh_routes(self):
@@ -329,16 +331,24 @@ class LibreBeaconApp:
             self.delivery_report.set(self.deliveries.summary([r.target for r in self.route_records]))
 
     def show_mesh_destinations(self):
-        matches = [e for e in self.notification_targets if e.startswith('notify.mesh_')]
-        self.route_combo.configure(values=matches)
-        self.status.set(f'Found {len(matches)} possible Meshtastic destinations. '
-                        'Choose a private node, not a channel or broadcast.')
+        # Only offers likely personal nodes; not an identity check. A shared
+        # notify entity masquerading under a nice name is still a risk.
+        if not self.mesh_choices:
+            self.status.set('No mesh targets loaded. Press Find Destinations after setting up Meshtastic in Home Assistant.')
+            self.route_combo.configure(values=[])
+            return
+        available = [item.entity_id for item in self.mesh_choices if item.selectable]
+        refused = len(self.mesh_choices) - len(available)
+        self.route_combo.configure(values=available, state='readonly')
+        self.status.set(f'{len(available)} possible personal mesh nodes. {refused} unavailable/shared targets excluded. '
+                        'Check who owns the radio, then send a test with their permission.')
 
     def contact_help(self):
         messagebox.showinfo('Emergency contact setup',
             '1. Open Home Assistant and set up a phone, email or Meshtastic notification destination.\n'
             '2. Return here and press Find Destinations.\n'
-            '3. Enter a contact nickname and choose one notify.* entity or script.* entity.\n'
+            '3. For mesh, press Show Mesh Nodes and choose an individual recipient. For other contacts, '
+            'choose one notify.* entity or script.* entity.\n'
             '4. Tick consent, press Add Contact, then Save.\n'
             '5. Select the contact and press Test Selected. Ask them to confirm it arrived.\n'
             '6. Set a critical-low threshold in Alert rules and explicitly enable contact messages.\n\n'
@@ -351,6 +361,23 @@ class LibreBeaconApp:
             read_routes([r.as_dict() for r in self.route_records] + [route.as_dict()])
         except ValueError as exc:
             messagebox.showerror('Contact', str(exc)); return
+        if is_mesh_entity(route.target):
+            try:
+                choice = require_mesh_choice(route.target, [
+                    {'entity_id': item.entity_id, 'state': 'unknown',
+                     'attributes': {'friendly_name': item.friendly_name}}
+                    for item in self.mesh_choices if item.selectable])
+            except ValueError:
+                messagebox.showerror('Mesh contact', 'Find Destinations again. Choose a currently listed individual node, not a channel.')
+                return
+            # Consent to be contacted isn't proof that the selected entity is
+            # really a direct radio link. Ask explicitly; people swap hardware.
+            if not messagebox.askyesno('Confirm individual mesh node',
+                    f'Home Assistant destination: {choice.entity_id}\n'
+                    f'Displayed name: {choice.friendly_name or "(not supplied)"}\n\n'
+                    'Have you checked in Home Assistant that this is one specific intended recipient, '
+                    'NOT a public channel or group? A radio request may never be received.'):
+                return
         self.route_records.append(route)
         self.refresh_routes()
         self.route_label.set(''); self.route_target.set(''); self.route_consent.set(False)
@@ -625,12 +652,18 @@ class LibreBeaconApp:
                     scripts=[e['entity_id'] for e in entities if e.get('entity_id','').startswith('script.')]
                     notifications=[e['entity_id'] for e in entities if e.get('entity_id','').startswith('notify.')]
                     self.notification_targets=sorted(scripts+notifications)
+                    self.mesh_choices=discover_mesh_choices(entities)
+                    # Restore normal entry after the mesh-only filter was used.
+                    self.route_combo.configure(state='normal')
                     self.glucose_combo.configure(values=glucose)
                     self.timestamp_combo.configure(values=stamps)
                     self.visual_combo.configure(values=scripts)
                     self.contact_combo.configure(values=scripts)
                     self.route_combo.configure(values=self.notification_targets)
-                    self.status.set(f'Found {len(glucose)} glucose candidates, {len(stamps)} timestamps and {len(self.notification_targets)} messaging destinations. Choose and save.')
+                    mesh_count = sum(item.selectable for item in self.mesh_choices)
+                    self.status.set(f'Found {len(glucose)} glucose candidates, {len(stamps)} timestamps and '
+                                    f'{len(self.notification_targets)} messaging destinations ('
+                                    f'{mesh_count} possible individual mesh nodes). Choose and save.')
                 elif key in ('reading','poll'):
                     self.show_reading(*result, allow_alerts=(key == 'poll'))
                 elif key=='emergency_test':

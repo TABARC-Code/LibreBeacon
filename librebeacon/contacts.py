@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .homeassistant import HomeAssistant, HomeAssistantError, VALID_ENTITY
-from .meshtastic import is_mesh_entity, appears_shared
+from .meshtastic import is_mesh_entity, appears_shared, require_mesh_choice
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,10 @@ def dispatch_route(client: HomeAssistant, route: ContactRoute, message: str) -> 
     route.validate()
     if not route.enabled or not route.consent:
         raise ValueError('The contact is not enabled and consented')
+    if is_mesh_entity(route.target):
+        # A previously saved node can disappear or be renamed into a channel.
+        # Cheap extra check before sending. No clever guesses, thanks.
+        require_mesh_choice(route.target, [client.state(route.target)])
     if route.target.startswith('notify.'):
         client.send_notification(route.target, message)
     else:

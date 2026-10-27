@@ -14,6 +14,8 @@ class FakeHomeAssistant:
     def __init__(self, broken=None):
         self.broken = broken
         self.requests = []
+    def state(self, target):
+        return {'entity_id': target, 'state': 'unknown', 'attributes': {}}
     def send_notification(self, target, message):
         self.requests.append(('notify',target,message))
         if self.broken==target: raise HomeAssistantError('Cannot reach target')

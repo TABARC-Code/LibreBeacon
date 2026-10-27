@@ -1,3 +1,10 @@
+## 4.3.2 — Home Assistant mesh setup
+
+- Show only plausible personal Meshtastic notify entities in the emergency-contact selector.
+- Ask the user to confirm the intended individual recipient before adding a mesh contact.
+- Re-check saved mesh destinations against live Home Assistant state before each send; stop if missing, unavailable or now presented as shared.
+- Better setup guidance and tests around destination changes. Message requests remain distinct from delivery and human acknowledgement.
+
 ## 4.3.0 — Mesh destination checks
 
 - Added a small module to identify possible individual Meshtastic notification entities in Home Assistant.

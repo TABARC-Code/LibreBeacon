@@ -1,6 +1,6 @@
 """Every send is mocked: not a single radio gets an unsolicited test."""
 import unittest
-from librebeacon.meshtastic import discover_mesh_choices, appears_shared, is_mesh_entity
+from librebeacon.meshtastic import discover_mesh_choices, appears_shared, is_mesh_entity, require_mesh_choice
 from librebeacon.contacts import ContactRoute
 
 
@@ -27,6 +27,28 @@ class MeshDestinationTests(unittest.TestCase):
                        'notify.mesh_everyone', 'notify.mesh_group_family', 'notify.mesh_all'):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 ContactRoute('Family', target, True, True).validate()
+
+    def test_current_state_must_still_be_an_individual_destination(self):
+        with self.assertRaises(ValueError):
+            require_mesh_choice('notify.mesh_contact', [
+                {'entity_id': 'notify.mesh_contact', 'state': 'unknown',
+                 'attributes': {'friendly_name': 'Household channel'}}])
+        with self.assertRaises(ValueError):
+            require_mesh_choice('notify.mesh_contact', [])
+        self.assertEqual(require_mesh_choice('notify.mesh_contact', [
+            {'entity_id': 'notify.mesh_contact', 'state': 'unknown',
+             'attributes': {'friendly_name': 'Receiver'} }]).entity_id, 'notify.mesh_contact')
+
+    def test_reject_changed_target_before_dispatch(self):
+        from librebeacon.contacts import dispatch_route
+        class Renamed:
+            def state(self, name):
+                return {'entity_id': name, 'state': 'unknown',
+                        'attributes': {'friendly_name': 'Public channel'}}
+            def send_notification(self, *args):
+                raise AssertionError('Should not attempt a send')
+        with self.assertRaises(ValueError):
+            dispatch_route(Renamed(), ContactRoute('Partner', 'notify.mesh_partner', True, True), 'TEST ONLY')
 
     def test_bad_discovery_records_do_not_crash(self):
         self.assertEqual(discover_mesh_choices([None, {}, {'entity_id': 1}]), [])

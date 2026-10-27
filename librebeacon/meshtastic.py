@@ -50,3 +50,17 @@ def discover_mesh_choices(states: list[dict]) -> list[MeshChoice]:
             choices.append(MeshChoice(entity_id, friendly_name, True,
                                       'Check this is the intended person, then send a labelled test'))
     return sorted(choices, key=lambda item: item.entity_id)
+
+
+def require_mesh_choice(entity_id: str, states: list[dict]) -> MeshChoice:
+    """Fail closed when a saved node's destination now points somewhere else.
+
+    This checks Home Assistant's current entity, not whether the recipient has
+    seen a message. A missing gateway shouldn't trigger an optimistic send.
+    """
+    if not is_mesh_entity(entity_id):
+        raise ValueError('This is not a Meshtastic notification entity')
+    matches = [item for item in discover_mesh_choices(states) if item.entity_id == entity_id]
+    if len(matches) != 1 or not matches[0].selectable:
+        raise ValueError('Mesh recipient not available as a plausible individual node; check Home Assistant')
+    return matches[0]

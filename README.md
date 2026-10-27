@@ -128,3 +128,19 @@ problem, update the relevant code comment and this table; when testing reveals a
 new limitation, put it here and link it back to the module. A useful paper trail is
 what actually changed, what was checked, and what still looks shaky. No invented
 results, please.
+
+
+## Version 4.3.2 — Mesh messages through Home Assistant
+
+The radio link stays on the Home Assistant side. LibreBeacon now helps pick a likely *individual* Meshtastic destination, hides recognisable broadcast/channel targets from the mesh-only list and asks for a final recipient check. A saved mesh destination is also checked against Home Assistant just before it is used. If that check fails, the app stops that route rather than making a hopeful guess.
+
+Nothing here turns a mesh into an emergency service. A service accepting the message is not the same as a person receiving it, and we have not added automated reply handling. Keep a working phone route as well. See [contact setup](docs/CONTACTS_AND_MESHTASTIC.md).
+
+**Notes for next time — current limit → next experiment:**
+
+- Entity names are a rough clue, and they're editable. Try gateway-provided recipient IDs in a future version; check how those change when a radio is replaced.
+- A radio can go out of range without Home Assistant immediately knowing. Test with the real devices, then consider an optional last-seen indicator. Don't pretend it guarantees delivery.
+- A reply on the mesh needs a verified sender *and* the correct alert ID. Not implementing escalation until we've got that right.
+- This still runs only while the Windows app is awake. An HA-side watcher's a separate job, with plenty of ways to duplicate messages if done carelessly.
+
+Practical arrangement: maintain both an ordinary phone notification and an individual mesh route if the intended carers agree. Run a labelled test on each one after setup or hardware changes.
