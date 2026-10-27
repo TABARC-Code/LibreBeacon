@@ -8,7 +8,7 @@ Unicode True
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LibreBeacon"
 
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "dist\LibreBeacon-Setup-v${APP_VERSION}.exe"
+OutFile "..\dist\LibreBeacon-Setup-v${APP_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\LibreBeacon"
 InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel user
@@ -29,7 +29,8 @@ Section "LibreBeacon" Main
   SectionIn RO
   SetShellVarContext current
   SetOutPath "$INSTDIR"
-  File "dist\LibreBeacon.exe"
+  ; NSIS resolves File and OutFile paths from this script folder.
+  File "..\dist\LibreBeacon.exe"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\LibreBeacon"
   CreateShortcut "$SMPROGRAMS\LibreBeacon\LibreBeacon.lnk" "$INSTDIR\LibreBeacon.exe"
