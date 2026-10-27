@@ -1,3 +1,10 @@
+## 4.3.0 — Mesh destination checks
+
+- Added a small module to identify possible individual Meshtastic notification entities in Home Assistant.
+- Filtered obvious channel, group and broadcast targets, including their displayed names.
+- Kept radio communication in Home Assistant; LibreBeacon does not manage keys or radio connections.
+- Added tests for unavailable nodes, misleading names and shared destinations.
+
 # Changelog
 
 ## 4.2.0 — Windows packaging and accessibility controls

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .homeassistant import HomeAssistant, HomeAssistantError, VALID_ENTITY
+from .meshtastic import is_mesh_entity, appears_shared
 
 
 @dataclass(frozen=True)
@@ -29,9 +30,8 @@ class ContactRoute:
             raise ValueError('Choose one Home Assistant notify entity or script for this contact')
         # Channel-wide meshes expose the notification to more listeners.
         # Names are imperfect; the UI and user still need to verify the route.
-        if self.target.startswith('notify.mesh_') and any(word in self.target for word in
-            ('_channel', '_broadcast', 'mesh_all', '_everyone')):
-            raise ValueError('Choose an individual Meshtastic recipient, not a broadcast channel')
+        if is_mesh_entity(self.target) and appears_shared(self.target):
+            raise ValueError('Choose an individual Meshtastic recipient, not a shared channel')
         if self.enabled and not self.consent:
             raise ValueError(f'{self.label}: confirm the recipient agreed before enabling')
         return self
