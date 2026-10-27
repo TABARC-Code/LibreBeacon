@@ -1,3 +1,11 @@
+# Changelog
+
+## 4.3.3 — Meshtastic system design
+
+- Documented the planned gateway, recipient verification, message, reply and escalation modules.
+- Defined failure-state handling, privacy defaults, accessible setup screens and real-radio test requirements.
+- Linked the complete design roadmap from the README. No radio runtime behaviour changed in this release.
+
 ## 4.3.2 — Home Assistant mesh setup
 
 - Show only plausible personal Meshtastic notify entities in the emergency-contact selector.
@@ -11,8 +19,6 @@
 - Filtered obvious channel, group and broadcast targets, including their displayed names.
 - Kept radio communication in Home Assistant; LibreBeacon does not manage keys or radio connections.
 - Added tests for unavailable nodes, misleading names and shared destinations.
-
-# Changelog
 
 ## 4.2.0 — Windows packaging and accessibility controls
 

@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.2.0** · experimental community prototype · MIT licence
+Current version: **4.3.3** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.2.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.3.3.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -60,6 +60,7 @@ Windows Phone Link may mirror the official Libre phone notifications, but LibreB
 
 - [Windows and Home Assistant: start here](docs/SETUP.md)
 - [Adding contacts, including Meshtastic](docs/CONTACTS_AND_MESHTASTIC.md)
+- [Meshtastic full design and test roadmap](docs/MESHTASTIC_DESIGN_PLAN.md) — planned, not implemented
 - [Accessibility and testing notes](docs/ACCESSIBILITY.md)
 - [Architecture and contributor extension points](docs/ARCHITECTURE.md)
 - [Example Home Assistant scripts](docs/EXAMPLE_SCRIPTS.yaml)
@@ -76,6 +77,10 @@ No live messages are sent by this test suite. The [contribution guide](CONTRIBUT
 ## Independence
 
 LibreBeacon is independent, unaffiliated software. Abbott, FreeStyle Libre, LibreLinkUp, Home Assistant, Meshtastic and Microsoft are trademarks or projects belonging to their respective owners. See [references](docs/REFERENCES.md).
+
+## Meshtastic development plan (v4.3.3)
+
+The next stage is a complete design for gateway health, verified individual recipients, short private messages, deliberate reply matching and optional escalation. **This is planning documentation, not implemented functionality.** See [Meshtastic design and test roadmap](docs/MESHTASTIC_DESIGN_PLAN.md). The existing v4.3.2 mesh sender remains unchanged.
 
 ## Version 1.9.3 — Major update
 

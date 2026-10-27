@@ -4,7 +4,7 @@ Unicode True
 !include "MUI2.nsh"
 
 !define APP_NAME "LibreBeacon"
-!define APP_VERSION "4.3.2"
+!define APP_VERSION "4.3.3"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LibreBeacon"
 
 Name "${APP_NAME} ${APP_VERSION}"
