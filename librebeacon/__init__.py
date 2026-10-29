@@ -1,2 +1,2 @@
 """LibreBeacon: optional accessibility alerts, not a medical alarm."""
-__version__ = "4.4.0"
+__version__ = "4.5.0"

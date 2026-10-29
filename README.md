@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.4.0** · experimental community prototype · MIT licence
+Current version: **4.5.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.4.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.5.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -41,7 +41,7 @@ A Windows build workflow now also packages a per-user installer. **No tested Win
 | Sensors | Find glucose sensors, select measurement timestamp, test reading |
 | Accessibility | Choose and test one of three audible patterns; steady visual notice by default, optional slow pulse; larger text |
 | Alerts | Select and test a Home Assistant lighting script; older contact-script support |
-| Emergency contacts | Find destinations, Show Mesh Nodes, Add, Remove, Test Selected, Check Contact Delivery Status, Record Recipient Reply, Save, Help |
+| Emergency contacts | Find destinations, Show Mesh Nodes, **Check Mesh Gateway Status**, Add, Remove, Test Selected, Check Contact Delivery Status, Record Recipient Reply, Save, Help |
 | Alert rules | Set ordinary low and high thresholds, optional critical-low threshold, age and check interval |
 
 **Contact sending is off by default.** Consent is required for every recipient and for enabling automatic critical-low messages. Thresholds deliberately have no default. A configured critical-low alert is distinct from an ordinary low alert, so a reading moving into the critical band can generate an additional event even during an existing low episode. Multiple contact requests are attempted independently; a failed request to one destination need not stop another. That still doesn't confirm actual delivery.
@@ -60,7 +60,7 @@ Windows Phone Link may mirror the official Libre phone notifications, but LibreB
 
 - [Windows and Home Assistant: start here](docs/SETUP.md)
 - [Adding contacts, including Meshtastic](docs/CONTACTS_AND_MESHTASTIC.md)
-- [Meshtastic full design and test roadmap](docs/MESHTASTIC_DESIGN_PLAN.md) — planned, not implemented
+- [Understanding Meshtastic gateway checks](docs/MESH_GATEWAY_HEALTH.md)
 - [Accessibility and testing notes](docs/ACCESSIBILITY.md)
 - [Architecture and contributor extension points](docs/ARCHITECTURE.md)
 - [Example Home Assistant scripts](docs/EXAMPLE_SCRIPTS.yaml)
@@ -77,10 +77,6 @@ No live messages are sent by this test suite. The [contribution guide](CONTRIBUT
 ## Independence
 
 LibreBeacon is independent, unaffiliated software. Abbott, FreeStyle Libre, LibreLinkUp, Home Assistant, Meshtastic and Microsoft are trademarks or projects belonging to their respective owners. See [references](docs/REFERENCES.md).
-
-## Meshtastic development plan (v4.3.3)
-
-The next stage is a complete design for gateway health, verified individual recipients, short private messages, deliberate reply matching and optional escalation. **This is planning documentation, not implemented functionality.** See [Meshtastic design and test roadmap](docs/MESHTASTIC_DESIGN_PLAN.md). The existing v4.3.2 mesh sender remains unchanged.
 
 ## Version 1.9.3 — Major update
 
@@ -152,8 +148,21 @@ Practical arrangement: maintain both an ordinary phone notification and an indiv
 
 ## Version 4.4.0 — Check the node, not the label
 
-Meshtastic setup now checks the integration's `node_id` and `user_id` state attributes for individual-node notification entities. It pins the selected node number to the contact and checks that identity again before sending. A changed or missing identity blocks that route; other opted-in contacts still run.
+Meshtastic setup now looks for the integration's `node_id` and `user_id` attributes on individual-node notification entities. Shared-channel notifications don't supply these. We pin the chosen node number in the contact record and check it again before every message request. A changed or missing identity stops that contact route; other configured contacts are still attempted.
 
-**Existing mesh contacts:** older saved contacts had no pinned node ID, so they now load disabled. Remove and re-add the intended recipient after checking the node number with them, then save your settings. Phone and email contacts are unaffected.
+**For existing users:** old mesh contacts are kept but automatically disabled until reviewed and re-added. Save the contact list after checking your nodes. This is a breaking safety adjustment, not an accidental loss of recipients.
 
-This doesn't prove who physically owns the radio, that the radio received a message, or that anyone replied. Next: verify the entity's registry platform and check gateway health with real equipment. [Meshtastic setup guide](docs/CONTACTS_AND_MESHTASTIC.md).
+Next: verify Home Assistant registry ownership, track gateway health and report it with the same care. The node number isn't a public-key fingerprint or proof that the recipient answered. [See the Meshtastic contact guide](docs/CONTACTS_AND_MESHTASTIC.md).
+
+## Version 4.5.0 — Meshtastic gateway checks
+
+The radio path has more moving parts than a standard notification. This release adds a read-only **Check Meshtastic Gateway Status** button on Start Here and Emergency contacts. It asks Home Assistant for its current gateway entities and reports what HA says, without pretending this is a radio range test. For saved mesh recipients, it can also display the age of a single matching *last-heard* sensor. A recent packet does not tell us whether today's alert will arrive.
+
+**Working notes — noticed → current choice → next check:**
+
+- A gateway entity can say Connected long after its last state change. We report **HA reports connected**, not *radio definitely working*. Next: compare with actual gateway unplug/reconnect tests.
+- More than one gateway might expose telemetry for the same node. Picking the newest without knowing which gateway owns it would be tidy-looking nonsense. We display **not verified** until the ambiguity is resolved. Next: expose gateway-scoped registry metadata, with tests.
+- A missing timestamp isn't proof of a radio being switched off. We avoid a red *offline* badge and provide a plain explanation. Next: run tests with real devices in different rooms.
+- The current Windows program still needs to remain open and awake. A resident Home Assistant component might make more sense eventually, but then the duplicate-message logic needs revisiting first.
+
+**Still untested:** actual Libre readings, Windows assistive technology, live Meshtastic gateway telemetry and physical message delivery. Keep the official Libre monitoring and its alarms enabled.

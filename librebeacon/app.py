@@ -18,6 +18,7 @@ from .readiness import setup_checks
 from .health import ConnectionHealth
 from .delivery import DeliveryTracker
 from .meshtastic import discover_mesh_choices, is_mesh_entity, require_mesh_choice
+from .mesh_health import discover_gateways, gateway_summary, node_last_heard
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -154,6 +155,8 @@ class LibreBeaconApp:
                            ("6. Set agreed glucose thresholds", self.rules)):
             ttk.Button(p, text=label, command=lambda target=tab: self.tabs.select(target)).pack(
                 fill='x', anchor='w', pady=2)
+        ttk.Button(p, text='Check Meshtastic Gateway Status', command=self.check_mesh_health).pack(
+            fill='x', anchor='w', pady=3)
         ttk.Button(p, text='Check Saved Setup', command=self.refresh_setup).pack(anchor='w', pady=10)
         self.setup_report = tk.StringVar()
         ttk.Label(p, textvariable=self.setup_report, wraplength=750,
@@ -300,6 +303,7 @@ class LibreBeaconApp:
         ttk.Button(another, text='Remove Selected', command=self.remove_emergency_route).pack(side='left', padx=3)
         ttk.Button(another, text='Test Selected', command=self.test_emergency_route).pack(side='left', padx=3)
         ttk.Button(another, text='Record Recipient Reply', command=self.confirm_emergency_route).pack(side='left', padx=3)
+        ttk.Button(box, text='Check Mesh Gateway Status', command=self.check_mesh_health).pack(anchor='w', pady=4)
         ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
         self.delivery_report = tk.StringVar()
         ttk.Label(box, textvariable=self.delivery_report, wraplength=790,
@@ -611,6 +615,36 @@ class LibreBeaconApp:
         self.status.set('Finding Home Assistant entities…')
         self.start('entities', c.states)
 
+    def check_mesh_health(self):
+        """A read-only check. No test packet gets sent by this button."""
+        try:
+            client = self.client()
+        except HomeAssistantError as exc:
+            messagebox.showerror('Mesh gateway status', str(exc))
+            return
+        # This is a separate window instead of burying another panel beneath
+        # the contact buttons. At 200% scaling the old screen is busy enough.
+        if not hasattr(self, 'mesh_window') or not self.mesh_window.winfo_exists():
+            self.mesh_window = tk.Toplevel(self.root)
+            self.mesh_window.title('Meshtastic gateway status — supplementary only')
+            self.mesh_window.minsize(570, 310)
+            panel = ttk.Frame(self.mesh_window, padding=15)
+            panel.pack(fill='both', expand=True)
+            self.mesh_status_text = tk.StringVar(value='Checking Home Assistant…')
+            ttk.Label(panel, text='Mesh connection and recent radio observations',
+                      font=('Segoe UI', 14, 'bold'), wraplength=650).pack(anchor='w', pady=8)
+            ttk.Label(panel, textvariable=self.mesh_status_text, justify='left',
+                      wraplength=650).pack(fill='both', expand=True)
+            controls = ttk.Frame(panel)
+            controls.pack(fill='x', pady=10)
+            ttk.Button(controls, text='Refresh', command=self.check_mesh_health).pack(side='left', padx=4)
+            ttk.Button(controls, text='Open Home Assistant', command=self.open_ha).pack(side='left', padx=4)
+            ttk.Button(controls, text='Close', command=self.mesh_window.destroy).pack(side='left', padx=4)
+        self.mesh_window.lift()
+        self.mesh_status_text.set('Checking Home Assistant…')
+        self.status.set('Checking Meshtastic gateway entities (no radio messages sent)…')
+        self.start('mesh_health', client.states)
+
     def manual_refresh(self):
         try:
             c=self.client()
@@ -644,6 +678,10 @@ class LibreBeaconApp:
                 if key=='poll':self.busy_poll=False
                 if not ok:
                     self.status.set(f'{key}: {result}')
+                    if key == 'mesh_health' and hasattr(self, 'mesh_status_text'):
+                        self.mesh_status_text.set('Could not read Home Assistant gateway states. Check the connection and try again. No radio check was performed.')
+                        self.status.set('Mesh gateway check failed. Check the Home Assistant connection.')
+                        continue
                     if key in ('reading','poll'):
                         self.health.failure(datetime.now(timezone.utc))
                         self.update_health_display()
@@ -676,6 +714,20 @@ class LibreBeaconApp:
                                     f'{mesh_count} possible individual mesh nodes). Choose and save.')
                 elif key in ('reading','poll'):
                     self.show_reading(*result, allow_alerts=(key == 'poll'))
+                elif key == 'mesh_health':
+                    checked = datetime.now(timezone.utc)
+                    report = gateway_summary(discover_gateways(result, now=checked), now=checked)
+                    mesh_nodes = sorted({route.mesh_node_id for route in self.route_records
+                                         if is_mesh_entity(route.target) and route.mesh_node_id is not None})
+                    if mesh_nodes:
+                        observations = []
+                        for node in mesh_nodes:
+                            value = node_last_heard(result, node, now=checked)
+                            observations.append(f'Node !{node:08x} — {value.status}: {value.detail}')
+                        report += '\n\nRecipient observations (not delivery checks):\n' + '\n'.join(observations)
+                    if hasattr(self, 'mesh_status_text'):
+                        self.mesh_status_text.set(report)
+                    self.status.set('Mesh gateway status checked. Read the status window; no message was sent.')
                 elif key=='emergency_test':
                     destination, accepted, failure = result
                     self.deliveries.record(destination, accepted=accepted, kind='test',

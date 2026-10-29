@@ -1,18 +1,22 @@
 # Changelog
 
+## 4.5.0 — Meshtastic gateway diagnostics
+
+- Added a read-only gateway check from Home Assistant, with clear reported-connected, disconnected, unknown and unverified states.
+- Added a button-driven status window, plus a Start Here shortcut and a refresh control.
+- Shows each configured mesh recipient’s last-heard observation if a single matching timestamp sensor is available. Old, missing, future or ambiguous observations are not treated as live radio coverage.
+- Does not send radio messages, enable contacts or infer human acknowledgement. Existing alert routing remains unchanged.
+- Expanded mock-based failure and clock tests; real Windows/radio testing remains outstanding.
+
+
 ## 4.4.0 — Meshtastic recipient identity
 
-- Require integration-provided numeric node IDs and matching user IDs for mesh recipient selection.
-- Pin the approved node identity and recheck it against Home Assistant before each message request.
-- Reject renamed channels, invalid identities and changed recipient numbers; unrelated contacts continue independently.
-- Preserve older contacts but disable their mesh routes until reviewed and re-added.
-- Expand offline tests and explain the change in setup instructions. No live-radio testing in this version.
-
-## 4.3.3 — Meshtastic system design
-
-- Documented the planned gateway, recipient verification, message, reply and escalation modules.
-- Defined failure-state handling, privacy defaults, accessible setup screens and real-radio test requirements.
-- Linked the complete design roadmap from the README. No radio runtime behaviour changed in this release.
+- Require integration-provided numeric node IDs and matching user IDs when adding a mesh recipient.
+- Pin each approved recipient to their node number and check it again before sending.
+- Block renamed channels, invalid identities and changed recipients without interrupting other contact routes.
+- Keep older contacts visible but disabled until someone checks and re-adds them.
+- Update the setup guide, display the saved node ID and expand the offline regression tests.
+- No live radio or Windows hardware testing in this update.
 
 ## 4.3.2 — Home Assistant mesh setup
 
@@ -27,6 +31,7 @@
 - Filtered obvious channel, group and broadcast targets, including their displayed names.
 - Kept radio communication in Home Assistant; LibreBeacon does not manage keys or radio connections.
 - Added tests for unavailable nodes, misleading names and shared destinations.
+
 
 ## 4.2.0 — Windows packaging and accessibility controls
 

@@ -45,3 +45,14 @@ Old Meshtastic contacts didn't store a node ID. They now load **disabled** so a 
 If a node is replaced, its identity changes or the Home Assistant integration stops providing `node_id` and `user_id`, the route blocks sending until you review it. This is deliberate. A Home Assistant entity's changing label is not a basis for sending health-related messages to someone else.
 
 **Next job:** check the entity's registry platform and gateway binding as well, using Home Assistant's authenticated registry interface. This update checks the state supplied by Home Assistant; it isn't an independent cryptographic proof of ownership or packet delivery.
+
+## Checking gateway health (v4.5.0)
+
+Open **Start Here → Check Meshtastic Gateway Status** or **Emergency contacts → Check Mesh Gateway Status**. No test radio packet is transmitted by this button. The window reads Home Assistant's gateway entity state and, where available, the last-heard timestamp sensor for the saved recipient node. You can refresh it or open Home Assistant for troubleshooting.
+
+- **HA reports connected:** Home Assistant reports a configured gateway connected, but does not establish delivery or radio range.
+- **Disconnected:** Home Assistant marks that gateway disconnected/unavailable. Check its power and its configured TCP, USB or Bluetooth connection.
+- **Unknown/unverified:** Home Assistant doesn't supply the expected gateway state/type. Check the Meshtastic integration and inspect its entities in Home Assistant.
+- **Recent/old observation:** a timestamp for the last packet Home Assistant recorded from the configured node. This is *not* a live reachability check. Missing or multiple matching timestamps are reported as unverified.
+
+The health screen is **diagnostic only**. It deliberately doesn't change contact consent, cancel official Libre alarms or silently re-route messages. The individual node ID check from v4.4.0 still runs before each mesh send. See [gateway health notes](MESH_GATEWAY_HEALTH.md).

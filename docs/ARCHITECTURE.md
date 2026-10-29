@@ -51,3 +51,7 @@ The emergency recipient confirmation currently lives only in the Windows session
 - `installer/LibreBeacon.nsi`: installs only under the current user's profile, does not require admin and does not add startup tasks. Don't introduce automatic monitoring at login without explicit user action and clear health-of-service reporting.
 
 Working rule: update the README's *noticed → choice → next check* table when a test confirms or disproves one of these thoughts. Changes in source should point back to actual field observations when there are any. No assumptions about a successful phone message just because a REST request returned 200.
+
+## 4.5.0 — Gateway diagnostics
+
+`mesh_health.py` classifies Home Assistant gateway entities and last-heard node timestamps. It's read-only and doesn't attempt an over-the-air test. Keep observations separate from real notification receipts. We should bind gateway identities through the HA entity/device registries in a later release, rather than inferring an owner from a name or treating `last_changed` as a heartbeat. Testing with a single virtual gateway is easy; two real gateways and a weak signal will be far more revealing.
