@@ -7,7 +7,7 @@ from librebeacon.contacts import ContactRoute
 class MeshDestinationTests(unittest.TestCase):
     def test_direct_and_shared_entities(self):
         states = [
-            {'entity_id': 'notify.mesh_alice', 'state': 'unknown', 'attributes': {'friendly_name': 'Alice radio'}},
+            {'entity_id': 'notify.mesh_alice', 'state': 'unknown', 'attributes': {'friendly_name': 'Alice radio', 'node_id': 17, 'user_id': '!00000011'}},
             {'entity_id': 'notify.mesh_channel_0', 'state': 'unknown', 'attributes': {}},
             {'entity_id': 'notify.mesh_friends', 'state': 'unavailable', 'attributes': {}},
             {'entity_id': 'notify.mesh_misc', 'state': 'unknown', 'attributes': {'friendly_name': 'Public alerts'}},
@@ -37,7 +37,7 @@ class MeshDestinationTests(unittest.TestCase):
             require_mesh_choice('notify.mesh_contact', [])
         self.assertEqual(require_mesh_choice('notify.mesh_contact', [
             {'entity_id': 'notify.mesh_contact', 'state': 'unknown',
-             'attributes': {'friendly_name': 'Receiver'} }]).entity_id, 'notify.mesh_contact')
+             'attributes': {'friendly_name': 'Receiver', 'node_id': 32, 'user_id': '!00000020'} }]).entity_id, 'notify.mesh_contact')
 
     def test_reject_changed_target_before_dispatch(self):
         from librebeacon.contacts import dispatch_route

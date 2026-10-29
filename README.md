@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.3.3** · experimental community prototype · MIT licence
+Current version: **4.4.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.3.3.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.4.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -149,3 +149,11 @@ Nothing here turns a mesh into an emergency service. A service accepting the mes
 - This still runs only while the Windows app is awake. An HA-side watcher's a separate job, with plenty of ways to duplicate messages if done carelessly.
 
 Practical arrangement: maintain both an ordinary phone notification and an individual mesh route if the intended carers agree. Run a labelled test on each one after setup or hardware changes.
+
+## Version 4.4.0 — Check the node, not the label
+
+Meshtastic setup now checks the integration's `node_id` and `user_id` state attributes for individual-node notification entities. It pins the selected node number to the contact and checks that identity again before sending. A changed or missing identity blocks that route; other opted-in contacts still run.
+
+**Existing mesh contacts:** older saved contacts had no pinned node ID, so they now load disabled. Remove and re-add the intended recipient after checking the node number with them, then save your settings. Phone and email contacts are unaffected.
+
+This doesn't prove who physically owns the radio, that the radio received a message, or that anyone replied. Next: verify the entity's registry platform and check gateway health with real equipment. [Meshtastic setup guide](docs/CONTACTS_AND_MESHTASTIC.md).

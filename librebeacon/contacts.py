@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .homeassistant import HomeAssistant, HomeAssistantError, VALID_ENTITY
-from .meshtastic import is_mesh_entity, appears_shared, require_mesh_choice
+from .meshtastic import is_mesh_entity, appears_shared, require_mesh_choice, valid_node_id
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class ContactRoute:
     target: str
     consent: bool = False
     enabled: bool = False
+    mesh_node_id: int | None = None
 
     def validate(self) -> 'ContactRoute':
         if not isinstance(self.label, str) or not isinstance(self.target, str) \
@@ -32,13 +33,23 @@ class ContactRoute:
         # Names are imperfect; the UI and user still need to verify the route.
         if is_mesh_entity(self.target) and appears_shared(self.target):
             raise ValueError('Choose an individual Meshtastic recipient, not a shared channel')
+        if is_mesh_entity(self.target):
+            if self.mesh_node_id is not None and not valid_node_id(self.mesh_node_id):
+                raise ValueError('Meshtastic node identity must be a positive 32-bit number')
+            if self.enabled and self.mesh_node_id is None:
+                raise ValueError('Review and re-add this mesh contact to pin its node identity')
+        elif self.mesh_node_id is not None:
+            raise ValueError('Mesh identity cannot be attached to an ordinary contact')
         if self.enabled and not self.consent:
             raise ValueError(f'{self.label}: confirm the recipient agreed before enabling')
         return self
 
     def as_dict(self) -> dict:
-        return {'label': self.label, 'target': self.target,
-                'consent': self.consent, 'enabled': self.enabled}
+        record = {'label': self.label, 'target': self.target,
+                  'consent': self.consent, 'enabled': self.enabled}
+        if is_mesh_entity(self.target) and self.mesh_node_id is not None:
+            record['mesh_node_id'] = self.mesh_node_id
+        return record
 
 
 def read_routes(items: list[dict]) -> list[ContactRoute]:
@@ -48,8 +59,14 @@ def read_routes(items: list[dict]) -> list[ContactRoute]:
     for raw in items:
         if not isinstance(raw, dict):
             raise ValueError('Invalid contact record')
-        route = ContactRoute(**{key: raw.get(key, default) for key, default in
-                                   [('label', ''), ('target', ''), ('consent', False), ('enabled', False)]}).validate()
+        values = {key: raw.get(key, default) for key, default in
+                  [('label', ''), ('target', ''), ('consent', False),
+                   ('enabled', False), ('mesh_node_id', None)]}
+        # Old saves carried a name alone. Leave the contact visible, but
+        # disable it. Removing or re-adding is safer than a guessed identity.
+        if is_mesh_entity(values['target']) and values['mesh_node_id'] is None:
+            values['enabled'] = False
+        route = ContactRoute(**values).validate()
         if route.target in seen:
             raise ValueError(f'Destination {route.target} is already configured. Add it just once.')
         if route.label.strip().casefold() in seen_labels:
@@ -77,7 +94,10 @@ def dispatch_route(client: HomeAssistant, route: ContactRoute, message: str) -> 
     if is_mesh_entity(route.target):
         # A previously saved node can disappear or be renamed into a channel.
         # Cheap extra check before sending. No clever guesses, thanks.
-        require_mesh_choice(route.target, [client.state(route.target)])
+        # Pin the numeric recipient to the saved contact and check it afresh
+        # before every send. HTTP accepted still doesn't mean radio delivery.
+        require_mesh_choice(route.target, [client.state(route.target)],
+                            expected_node_id=route.mesh_node_id)
     if route.target.startswith('notify.'):
         client.send_notification(route.target, message)
     else:

@@ -90,8 +90,8 @@ class ContactTests(unittest.TestCase):
 
     def test_selected_notify_entity_only(self):
         h=FakeHomeAssistant()
-        dispatch_route(h,ContactRoute('One','notify.mesh_friend',True,True),'TEST ONLY')
-        self.assertEqual(h.requests,[('notify','notify.mesh_friend','TEST ONLY')])
+        dispatch_route(h,ContactRoute('One','notify.friend',True,True),'TEST ONLY')
+        self.assertEqual(h.requests,[('notify','notify.friend','TEST ONLY')])
 
     def test_selected_script_only(self):
         h=FakeHomeAssistant()

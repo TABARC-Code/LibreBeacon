@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.4.0 — Meshtastic recipient identity
+
+- Require integration-provided numeric node IDs and matching user IDs for mesh recipient selection.
+- Pin the approved node identity and recheck it against Home Assistant before each message request.
+- Reject renamed channels, invalid identities and changed recipient numbers; unrelated contacts continue independently.
+- Preserve older contacts but disable their mesh routes until reviewed and re-added.
+- Expand offline tests and explain the change in setup instructions. No live-radio testing in this version.
+
 ## 4.3.3 — Meshtastic system design
 
 - Documented the planned gateway, recipient verification, message, reply and escalation modules.

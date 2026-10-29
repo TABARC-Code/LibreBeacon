@@ -1,14 +1,12 @@
-"""Home Assistant mesh destination checks. No direct radio work in here.
+"""Home Assistant Meshtastic recipient evidence, not a second radio driver.
 
-A friendly name is a hint, not a signed certificate. We filter obvious public
-routes and ask somebody to check the intended node before it can be saved.
+The integration's node notifications expose node_id + user_id. Channels don't.
+A nice name isn't proof of anything, and neither is a user ticking a box.
 """
 from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-
-# Avoid substring matching: 'Allison' is a person; 'all' is usually a group.
 _SHARING_WORDS = frozenset({'broadcast', 'channel', 'everyone', 'public', 'group', 'all', 'global'})
 
 
@@ -21,16 +19,26 @@ def appears_shared(entity_id: str, friendly_name: str = '') -> bool:
     return bool(_SHARING_WORDS.intersection(words))
 
 
+def valid_node_id(value: object) -> bool:
+    # Firmware node numbers are unsigned 32-bit. A boolean is not a node ID.
+    return type(value) is int and 0 < value <= 0xFFFFFFFF
+
+
 @dataclass(frozen=True)
 class MeshChoice:
     entity_id: str
     friendly_name: str
     selectable: bool
     explanation: str
+    node_id: int | None = None
 
 
 def discover_mesh_choices(states: list[dict]) -> list[MeshChoice]:
-    """Only offers plausible direct nodes. It cannot prove who's holding a radio."""
+    """Check integration-provided node attributes. Unknown is not 'available'.
+
+    This is stronger than checking names, but not cryptographic identity proof.
+    Someone still has to check who owns the receiver. Boring, necessary.
+    """
     choices: list[MeshChoice] = []
     for state in states:
         if not isinstance(state, dict):
@@ -38,29 +46,38 @@ def discover_mesh_choices(states: list[dict]) -> list[MeshChoice]:
         entity_id = state.get('entity_id', '')
         if not is_mesh_entity(entity_id):
             continue
-        attrs = state.get('attributes') or {}
-        friendly_name = attrs.get('friendly_name', '') if isinstance(attrs, dict) else ''
-        if not isinstance(friendly_name, str):
-            friendly_name = ''
-        if appears_shared(entity_id, friendly_name):
-            choices.append(MeshChoice(entity_id, friendly_name, False, 'Possible channel or shared destination'))
-        elif state.get('state') == 'unavailable':
-            choices.append(MeshChoice(entity_id, friendly_name, False, 'Home Assistant marks it unavailable'))
+        attrs = state.get('attributes')
+        attrs = attrs if isinstance(attrs, dict) else {}
+        friendly = attrs.get('friendly_name', '')
+        friendly = friendly if isinstance(friendly, str) else ''
+        node_id = attrs.get('node_id')
+        user_id = attrs.get('user_id')
+        identity_ok = valid_node_id(node_id) and user_id == f'!{node_id:08x}'
+        # MeshtasticChannelNotify has no node_id/user_id. A renamed channel
+        # must never get through just because it sounds like a person.
+        if appears_shared(entity_id, friendly):
+            reason = 'Possible shared channel or broadcast'
+        elif state.get('state') in ('unavailable', 'unknown_gateway'):
+            reason = 'Home Assistant marks the destination unavailable'
+        elif not identity_ok:
+            reason = 'No verified node-type attributes (check the Meshtastic integration)'
         else:
-            choices.append(MeshChoice(entity_id, friendly_name, True,
-                                      'Check this is the intended person, then send a labelled test'))
+            reason = ''
+        choices.append(MeshChoice(entity_id, friendly, not bool(reason),
+                    reason or 'Node attributes present; confirm the actual owner before use',
+                    node_id if identity_ok else None))
     return sorted(choices, key=lambda item: item.entity_id)
 
 
-def require_mesh_choice(entity_id: str, states: list[dict]) -> MeshChoice:
-    """Fail closed when a saved node's destination now points somewhere else.
-
-    This checks Home Assistant's current entity, not whether the recipient has
-    seen a message. A missing gateway shouldn't trigger an optimistic send.
-    """
+def require_mesh_choice(entity_id: str, states: list[dict], *, expected_node_id: int | None = None) -> MeshChoice:
+    """Fail closed when a destination changed identity or lost its attributes."""
     if not is_mesh_entity(entity_id):
         raise ValueError('This is not a Meshtastic notification entity')
+    if expected_node_id is not None and not valid_node_id(expected_node_id):
+        raise ValueError('The saved Meshtastic node identity is invalid')
     matches = [item for item in discover_mesh_choices(states) if item.entity_id == entity_id]
     if len(matches) != 1 or not matches[0].selectable:
-        raise ValueError('Mesh recipient not available as a plausible individual node; check Home Assistant')
+        raise ValueError('Mesh recipient identity unavailable; check its node in Home Assistant')
+    if expected_node_id is not None and matches[0].node_id != expected_node_id:
+        raise ValueError('Meshtastic recipient identity has changed; remove and re-add it')
     return matches[0]

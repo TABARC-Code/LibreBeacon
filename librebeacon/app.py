@@ -318,15 +318,19 @@ class LibreBeaconApp:
         ttk.Button(helpbar, text='Save Emergency Contact Settings', command=self.save_general).pack(side='left', padx=3)
         ttk.Button(helpbar, text='Help Choosing a Destination', command=self.contact_help).pack(side='left', padx=3)
         ttk.Label(box, text='Meshtastic: install the Meshtastic integration in Home Assistant, '
-                  'press Find Destinations, then Show Mesh Nodes. Only likely personal nodes are listed; '
-                  'confirm the intended person and run a test. Radio receipt is never proof of a reply.',
+                  'press Find Destinations, then Show Mesh Nodes. Only nodes with integration-provided '
+                  'identities are listed. Check the node ID with the owner. Old contacts need re-adding. '
+                  'Radio receipt is never proof of a reply.',
                   wraplength=790).pack(anchor='w', pady=4)
 
     def refresh_routes(self):
         self.route_list.delete(0, tk.END)
         for route in self.route_records:
             note = self.deliveries.description(route.target)
-            self.route_list.insert(tk.END, f'{route.label}  •  {route.target}  [{note}]')
+            mesh_note = (f' • node !{route.mesh_node_id:08x}' if route.mesh_node_id else
+                         ' • mesh identity needs review' if is_mesh_entity(route.target) else '')
+            active_note = '' if route.enabled else ' • DISABLED'
+            self.route_list.insert(tk.END, f'{route.label}  •  {route.target}{mesh_note}{active_note}  [{note}]')
         if hasattr(self, 'delivery_report'):
             self.delivery_report.set(self.deliveries.summary([r.target for r in self.route_records]))
 
@@ -340,8 +344,9 @@ class LibreBeaconApp:
         available = [item.entity_id for item in self.mesh_choices if item.selectable]
         refused = len(self.mesh_choices) - len(available)
         self.route_combo.configure(values=available, state='readonly')
-        self.status.set(f'{len(available)} possible personal mesh nodes. {refused} unavailable/shared targets excluded. '
-                        'Check who owns the radio, then send a test with their permission.')
+        self.status.set(f'{len(available)} mesh nodes with identity attributes. '
+                        f'{refused} uncertain/shared targets excluded. '
+                        'You still need to check the radio with its owner.')
 
     def contact_help(self):
         messagebox.showinfo('Emergency contact setup',
@@ -355,29 +360,34 @@ class LibreBeaconApp:
             'Sending does not prove delivery. Always keep the official Libre alarms on.')
 
     def add_emergency_route(self):
+        label, target = self.route_label.get().strip(), self.route_target.get().strip()
+        node_id = None
+        if is_mesh_entity(target):
+            # Important: this is integration metadata, not some made-up
+            # identity inferred from a pleasant-looking entity name.
+            matches = [item for item in self.mesh_choices
+                       if item.entity_id == target and item.selectable]
+            if len(matches) != 1 or matches[0].node_id is None:
+                messagebox.showerror('Mesh contact',
+                    'Press Find Destinations, then Show Mesh Nodes. Choose a node with an identity.')
+                return
+            choice = matches[0]
+            node_id = choice.node_id
+            if not messagebox.askyesno('Check recipient identity',
+                    f'Destination: {choice.entity_id}\n'
+                    f'Node ID: !{node_id:08x}\n'
+                    f'Displayed name: {choice.friendly_name or "(not supplied)"}\n\n'
+                    'Have you checked this node with the intended recipient using another '
+                    'trusted contact method? Its name alone does not prove ownership. '
+                    'Radio delivery remains unconfirmed.'):
+                return
         try:
-            route = ContactRoute(self.route_label.get().strip(), self.route_target.get().strip(),
-                                 bool(self.route_consent.get()), True).validate()
+            route = ContactRoute(label, target, bool(self.route_consent.get()),
+                                 True, node_id).validate()
             read_routes([r.as_dict() for r in self.route_records] + [route.as_dict()])
         except ValueError as exc:
-            messagebox.showerror('Contact', str(exc)); return
-        if is_mesh_entity(route.target):
-            try:
-                choice = require_mesh_choice(route.target, [
-                    {'entity_id': item.entity_id, 'state': 'unknown',
-                     'attributes': {'friendly_name': item.friendly_name}}
-                    for item in self.mesh_choices if item.selectable])
-            except ValueError:
-                messagebox.showerror('Mesh contact', 'Find Destinations again. Choose a currently listed individual node, not a channel.')
-                return
-            # Consent to be contacted isn't proof that the selected entity is
-            # really a direct radio link. Ask explicitly; people swap hardware.
-            if not messagebox.askyesno('Confirm individual mesh node',
-                    f'Home Assistant destination: {choice.entity_id}\n'
-                    f'Displayed name: {choice.friendly_name or "(not supplied)"}\n\n'
-                    'Have you checked in Home Assistant that this is one specific intended recipient, '
-                    'NOT a public channel or group? A radio request may never be received.'):
-                return
+            messagebox.showerror('Contact', str(exc))
+            return
         self.route_records.append(route)
         self.refresh_routes()
         self.route_label.set(''); self.route_target.set(''); self.route_consent.set(False)
