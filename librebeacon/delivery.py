@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import re
 
 
 @dataclass
@@ -10,6 +11,7 @@ class Attempt:
     kind: str
     attempted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     error_type: str = ''
+    reference: str = ''
     confirmed_manually: bool = False
 
     @property
@@ -18,9 +20,10 @@ class Attempt:
         if not self.accepted:
             suffix = f' ({self.error_type})' if self.error_type else ''
             return f'{time}: request failed{suffix}'
+        ref = f' ({self.reference})' if self.reference else ''
         if self.confirmed_manually:
-            return f'{time}: recipient reply recorded manually'
-        return f'{time}: request accepted; delivery unconfirmed'
+            return f'{time}: recipient reply recorded manually{ref}'
+        return f'{time}: request accepted; delivery unconfirmed{ref}'
 
 
 class DeliveryTracker:
@@ -28,11 +31,14 @@ class DeliveryTracker:
         self.attempts: dict[str, Attempt] = {}
 
     def record(self, destination: str, *, accepted: bool, kind: str,
-               error_type: str = '', now: datetime | None = None) -> Attempt:
+               error_type: str = '', now: datetime | None = None,
+               reference: str = '') -> Attempt:
         if not destination or kind not in {'test', 'critical_low'}:
             raise ValueError('Invalid destination or attempt type')
         if not isinstance(accepted, bool):
             raise ValueError('Accepted must be true or false')
+        if not isinstance(reference, str) or (reference and not re.fullmatch(r'LB-[0-9A-F]{16}', reference)):
+            raise ValueError('Invalid request reference')
         # Error class name only. A raw service exception may carry addresses,
         # URLs or token fragments. Not useful to print that to the screen.
         safe_error = error_type if error_type in {
@@ -40,7 +46,8 @@ class DeliveryTracker:
         } else 'ServiceError' if error_type else ''
         attempt = Attempt(accepted=accepted, kind=kind,
                           attempted_at=now or datetime.now(timezone.utc),
-                          error_type=safe_error if not accepted else '')
+                          error_type=safe_error if not accepted else '',
+                          reference=reference)
         self.attempts[destination] = attempt
         return attempt
 

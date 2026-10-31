@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.5.0** · experimental community prototype · MIT licence
+Current version: **4.6.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.5.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.6.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -41,12 +41,24 @@ A Windows build workflow now also packages a per-user installer. **No tested Win
 | Sensors | Find glucose sensors, select measurement timestamp, test reading |
 | Accessibility | Choose and test one of three audible patterns; steady visual notice by default, optional slow pulse; larger text |
 | Alerts | Select and test a Home Assistant lighting script; older contact-script support |
-| Emergency contacts | Find destinations, Show Mesh Nodes, **Check Mesh Gateway Status**, Add, Remove, Test Selected, Check Contact Delivery Status, Record Recipient Reply, Save, Help |
+| Emergency contacts | Find destinations, Show Mesh Nodes, **Check Mesh Gateway Status**, Add, Remove, Test Selected, Check Contact Delivery Status, Preview Mesh Messages, Record Recipient Reply, Save, Help |
 | Alert rules | Set ordinary low and high thresholds, optional critical-low threshold, age and check interval |
 
 **Contact sending is off by default.** Consent is required for every recipient and for enabling automatic critical-low messages. Thresholds deliberately have no default. A configured critical-low alert is distinct from an ordinary low alert, so a reading moving into the critical band can generate an additional event even during an existing low episode. Multiple contact requests are attempted independently; a failed request to one destination need not stop another. That still doesn't confirm actual delivery.
 
 By default, emergency contact messages do **not** include an exact glucose value. There is a separate, clearly labelled privacy option to include it. Messages are only sent to explicitly configured destinations, not automatically to everyone on a mesh network.
+
+## Meshtastic messages (v4.6.0)
+
+The optional radio contact route now uses **short, labelled messages** rather than forwarding a long email-style alert. A contact can preview the templates and send a clearly marked **TEST ONLY** message. Each radio request carries a random reference such as `LB-0123456789ABCDEF`, shown locally when Home Assistant accepts the request. There is **no automatic reply matching or escalation** yet.
+
+- One expressly approved `notify.mesh_*` node, with its pinned node identity checked immediately before each send.
+- Conservative 180-byte UTF-8 message limit; no automatic public-channel fallback or repeated send loop.
+- Critical-low alerts omit exact glucose values unless the person deliberately enables that privacy option.
+- Other Home Assistant phone and email contacts keep their existing message content.
+- Contact status means **Home Assistant accepted the request**, never that the radio or recipient received it. A reply must still be confirmed independently.
+
+[Plain-English message guide](docs/MESH_MESSAGING.md). The radio remains dependent on Home Assistant and a configured gateway. No message-delivery guarantees are made.
 
 ## What does and doesn't work yet
 

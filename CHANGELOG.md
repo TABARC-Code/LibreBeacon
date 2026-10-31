@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.6.0 — Mesh messaging
+
+- I added short, predictable test and supplementary critical-low message templates with a bounded radio payload.
+- I gave each request a local reference and added a preview before sending a real test.
+- I kept the glucose value out of mesh messages unless explicitly permitted.
+- I left the existing phone and email routes alone; Home Assistant still handles the radio.
+- No automatic recipient acknowledgement or retry loop yet.
+
 ## 4.5.0 — Meshtastic gateway diagnostics
 
 - Added a read-only gateway check from Home Assistant, with clear reported-connected, disconnected, unknown and unverified states.

@@ -53,14 +53,17 @@ class MeshIdentityTests(unittest.TestCase):
                         node(state='unavailable'), node(name='Public channel')):
             client = FakeHA(current)
             with self.subTest(current=current), self.assertRaises(ValueError):
-                dispatch_route(client, route, 'TEST ONLY')
+                dispatch_route(client, route, 'TEST ONLY', mesh_kind='test')
             self.assertEqual(client.sent, [])
 
     def test_valid_pinned_route_sends_to_one_target(self):
         route = ContactRoute('Neighbour', 'notify.mesh_friend', True, True, 0x1234)
         client = FakeHA(node())
-        dispatch_route(client, route, 'TEST ONLY')
-        self.assertEqual(client.sent, [('notify.mesh_friend', 'TEST ONLY')])
+        dispatch_route(client, route, 'TEST ONLY', mesh_kind='test')
+        self.assertEqual(len(client.sent), 1)
+        self.assertEqual(client.sent[0][0], 'notify.mesh_friend')
+        self.assertIn('TEST ONLY', client.sent[0][1])
+        self.assertIn('LB-', client.sent[0][1])
 
     def test_old_enabled_mesh_route_migrates_to_disabled(self):
         saved = [{'label': 'Neighbour', 'target': 'notify.mesh_friend',

@@ -19,6 +19,7 @@ from .health import ConnectionHealth
 from .delivery import DeliveryTracker
 from .meshtastic import discover_mesh_choices, is_mesh_entity, require_mesh_choice
 from .mesh_health import discover_gateways, gateway_summary, node_last_heard
+from .mesh_messages import build_mesh_message
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -302,6 +303,7 @@ class LibreBeaconApp:
         another = ttk.Frame(box); another.pack(anchor='w', pady=4)
         ttk.Button(another, text='Remove Selected', command=self.remove_emergency_route).pack(side='left', padx=3)
         ttk.Button(another, text='Test Selected', command=self.test_emergency_route).pack(side='left', padx=3)
+        ttk.Button(box, text='Preview Mesh Messages', command=self.preview_mesh_messages).pack(anchor='w', pady=4)
         ttk.Button(another, text='Record Recipient Reply', command=self.confirm_emergency_route).pack(side='left', padx=3)
         ttk.Button(box, text='Check Mesh Gateway Status', command=self.check_mesh_health).pack(anchor='w', pady=4)
         ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
@@ -405,13 +407,27 @@ class LibreBeaconApp:
         self.refresh_routes()
         self.status.set('Contact removed locally. Save settings to keep this change.')
 
+    def preview_mesh_messages(self):
+        # Preview doesn't connect to a radio. Easier to read before setting
+        # anything loose on the mesh. Use a fake reference on purpose.
+        sample = 'LB-' + '0' * 16
+        test = build_mesh_message('test', reference=sample)
+        alert = build_mesh_message('critical_low', reference=sample)
+        messagebox.showinfo('Mesh message preview (nothing sent)',
+            f'Radio test:\n{test.body}\n\nSupplementary critical-low alert:\n{alert.body}\n\n'
+            'Actual messages have a unique reference. Glucose values stay out by default. '
+            'Home Assistant accepting a request does not confirm delivery.')
+
     def test_emergency_route(self):
         picked = self.route_list.curselection()
         if not picked:
             messagebox.showinfo('Test contact', 'Select a contact first.'); return
         route = self.route_records[picked[0]]
+        mesh_test = build_mesh_message('test') if is_mesh_entity(route.target) else None
+        preview = (f'\n\nExact radio message:\n{mesh_test.body}' if mesh_test is not None else '')
         if not messagebox.askyesno('Send real test',
-            f'This will send a test to {route.label}. Have they agreed, and can they confirm receipt?'):
+            f'This will send a test to {route.label}. Have they agreed, '
+            f'and can they confirm receipt?{preview}'):
             return
         try: client = self.client()
         except HomeAssistantError as exc:
@@ -419,10 +435,12 @@ class LibreBeaconApp:
         from .contacts import dispatch_route
         def attempt():
             try:
-                dispatch_route(client, route, 'LibreBeacon TEST ONLY. No glucose emergency has occurred.')
-                return route.target, True, ''
+                ref = dispatch_route(client, route,
+                    'LibreBeacon TEST ONLY. No glucose emergency has occurred.',
+                    mesh_kind='test' if mesh_test is not None else None, mesh_text=mesh_test)
+                return route.target, True, '', ref
             except Exception as exc:
-                return route.target, False, exc.__class__.__name__
+                return route.target, False, exc.__class__.__name__, mesh_test.reference if mesh_test else ''
         self.start('emergency_test', attempt)
 
     def confirm_emergency_route(self):
@@ -729,22 +747,23 @@ class LibreBeaconApp:
                         self.mesh_status_text.set(report)
                     self.status.set('Mesh gateway status checked. Read the status window; no message was sent.')
                 elif key=='emergency_test':
-                    destination, accepted, failure = result
+                    destination, accepted, failure, reference = result
                     self.deliveries.record(destination, accepted=accepted, kind='test',
-                                           error_type=failure)
+                                           error_type=failure, reference=reference)
                     self.refresh_routes()
                     self.status.set('Test request accepted; ask the recipient to reply.' if accepted
                                     else 'Contact test request failed; check destination and Home Assistant.')
                 elif key=='emergency_delivery':
                     # The service's acknowledgement is not a person's reply.
                     targets = {r.label: r.target for r in self.route_records}
-                    for label, accepted, detail in result:
+                    for label, accepted, detail, reference in result:
                         if label in targets:
                             self.deliveries.record(targets[label], accepted=accepted,
-                                                   kind='critical_low', error_type=detail if not accepted else '')
+                                                   kind='critical_low', error_type=detail if not accepted else '',
+                                                   reference=reference)
                     self.refresh_routes()
-                    delivered = sum(1 for _, ok, _ in result if ok)
-                    failed = sum(1 for _, ok, _ in result if not ok)
+                    delivered = sum(1 for _, ok, _, _ in result if ok)
+                    failed = sum(1 for _, ok, _, _ in result if not ok)
                     self.status.set(f'Contact requests accepted: {delivered}; rejected: {failed}. Receipt remains unconfirmed.')
                 elif key in ('script','test_script'):
                     self.status.set('Home Assistant accepted the script request. Delivery or activation is not confirmed.')
@@ -796,7 +815,8 @@ class LibreBeaconApp:
                 def send_all():
                     results = []
                     dispatch_emergency(routes, client, text,
-                                       lambda name, ok, detail: results.append((name, ok, detail)))
+                                       lambda name, ok, detail, ref: results.append((name, ok, detail, ref)),
+                                       include_value=self.settings.include_glucose_in_messages, mmol=mmol)
                     return results
                 self.start('emergency_delivery', send_all)
         elif self.settings.enable_contacts:

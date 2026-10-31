@@ -11,6 +11,7 @@ from typing import Callable
 
 from .homeassistant import HomeAssistant, HomeAssistantError, VALID_ENTITY
 from .meshtastic import is_mesh_entity, appears_shared, require_mesh_choice, valid_node_id
+from .mesh_messages import MeshText, build_mesh_message, check_mesh_text
 
 
 @dataclass(frozen=True)
@@ -87,38 +88,56 @@ def emergency_message(include_value: bool = False, mmol: float | None = None) ->
     return text
 
 
-def dispatch_route(client: HomeAssistant, route: ContactRoute, message: str) -> None:
+def dispatch_route(client: HomeAssistant, route: ContactRoute, message: str, *,
+                   mesh_kind: str | None = None, mesh_text: MeshText | None = None,
+                   include_value: bool = False, mmol: float | None = None) -> str:
+    """Send through HA and return a mesh reference when there is one.
+
+    Preserve ordinary notify/script wording. Mesh contacts get a deliberately
+    short format instead of trying to squeeze a whole email onto LoRa.
+    """
     route.validate()
     if not route.enabled or not route.consent:
         raise ValueError('The contact is not enabled and consented')
     if is_mesh_entity(route.target):
-        # A previously saved node can disappear or be renamed into a channel.
-        # Cheap extra check before sending. No clever guesses, thanks.
-        # Pin the numeric recipient to the saved contact and check it afresh
-        # before every send. HTTP accepted still doesn't mean radio delivery.
+        if mesh_kind not in ('test', 'critical_low'):
+            raise ValueError('Choose a labelled mesh test or critical-low message')
+        if mesh_text is not None and mesh_kind != 'test':
+            raise ValueError('Only a test message may be prepared before dispatch')
+        prepared = (check_mesh_text(mesh_text, mesh_kind) if mesh_text is not None
+                    else build_mesh_message(mesh_kind, include_value=include_value, mmol=mmol))
+        # Check the current target, not a stale list from setup. Someone may
+        # have swapped the node. Radio networking already has enough surprises.
         require_mesh_choice(route.target, [client.state(route.target)],
                             expected_node_id=route.mesh_node_id)
+        client.send_notification(route.target, prepared.body)
+        return prepared.reference
+    if mesh_kind is not None or mesh_text is not None:
+        raise ValueError('Mesh message options cannot be sent to other contacts')
     if route.target.startswith('notify.'):
         client.send_notification(route.target, message)
     else:
         client.run_script(route.target, event='critical_low', message=message)
+    return ''
 
 
 def dispatch_emergency(routes: list[ContactRoute], client: HomeAssistant,
-                       message: str, on_result: Callable[[str, bool, str], None]) -> None:
-    """Attempt each configured destination even when one fails.
+                       message: str, on_result: Callable[[str, bool, str, str], None],
+                       *, include_value: bool = False, mmol: float | None = None) -> None:
+    """Attempt approved routes independently. An HA response is not delivery.
 
-    A successful request only means the upstream service accepted the action.
-    It isn't proof that a person received, saw, or understood the message.
+    The reference is local bookkeeping for M4, not an authenticated reply.
+    No retries here; one alert shouldn't occupy the neighbourhood's radios.
     """
     for route in routes:
         if not route.enabled or not route.consent:
             continue
         try:
-            dispatch_route(client, route, message)
+            ref = dispatch_route(client, route, message,
+                                 mesh_kind='critical_low' if is_mesh_entity(route.target) else None,
+                                 include_value=include_value, mmol=mmol)
         except Exception as exc:
-            # A faulty provider must not prevent trying another consenting contact.
-            # Keep trace details out of contact-facing UI until we have redaction.
-            on_result(route.label, False, exc.__class__.__name__)
+            # Keep errors generic. A provider exception could include an address.
+            on_result(route.label, False, exc.__class__.__name__, '')
         else:
-            on_result(route.label, True, 'Request accepted; delivery unconfirmed')
+            on_result(route.label, True, 'Request accepted; delivery unconfirmed', ref)
