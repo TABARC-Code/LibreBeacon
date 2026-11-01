@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from queue import Queue, Empty
-from threading import Thread
+from threading import Thread, Event
 import time
 import os
 import tkinter as tk
@@ -20,6 +20,8 @@ from .delivery import DeliveryTracker
 from .meshtastic import discover_mesh_choices, is_mesh_entity, require_mesh_choice
 from .mesh_health import discover_gateways, gateway_summary, node_last_heard
 from .mesh_messages import build_mesh_message
+from .mesh_replies import MeshReplyTracker, node_number
+from .mesh_stream import listen_for_replies
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -39,6 +41,9 @@ class LibreBeaconApp:
         self.engine = AlertEngine()
         self.health = ConnectionHealth()
         self.deliveries = DeliveryTracker()
+        self.mesh_replies = MeshReplyTracker()
+        self.mesh_listener_stop = Event()
+        self.mesh_listener_active = False
         self.queue: Queue = Queue()
         self.busy_poll = False
         self.next_poll = time.monotonic() + 2
@@ -59,6 +64,7 @@ class LibreBeaconApp:
         for index in range(1, 10):
             root.bind(f'<Control-Key-{index}>',
                       lambda event, pos=index-1: self.tabs.select(pos))
+        root.protocol('WM_DELETE_WINDOW', self.close)
         root.after(250, self.process_queue)
         root.after(1000, self.periodic)
 
@@ -306,6 +312,10 @@ class LibreBeaconApp:
         ttk.Button(box, text='Preview Mesh Messages', command=self.preview_mesh_messages).pack(anchor='w', pady=4)
         ttk.Button(another, text='Record Recipient Reply', command=self.confirm_emergency_route).pack(side='left', padx=3)
         ttk.Button(box, text='Check Mesh Gateway Status', command=self.check_mesh_health).pack(anchor='w', pady=4)
+        self.gateway_node_text = self.var('mesh_gateway_node_id')
+        self.mesh_reply_state = tk.StringVar(value='Reply listener OFF')
+        ttk.Button(box, text='Set Up Meshtastic Replies', command=self.open_mesh_reply_setup).pack(anchor='w', pady=4)
+        ttk.Button(box, text='Check Mesh Gateway Status', command=self.check_mesh_health).pack(anchor='w', pady=4)
         ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
         self.delivery_report = tk.StringVar()
         ttk.Label(box, textvariable=self.delivery_report, wraplength=790,
@@ -333,6 +343,9 @@ class LibreBeaconApp:
         self.route_list.delete(0, tk.END)
         for route in self.route_records:
             note = self.deliveries.description(route.target)
+            attempt = self.deliveries.attempts.get(route.target)
+            if attempt and attempt.reference and attempt.reference in self.mesh_replies.incidents:
+                note += ' / ' + self.mesh_replies.status(attempt.reference)
             mesh_note = (f' • node !{route.mesh_node_id:08x}' if route.mesh_node_id else
                          ' • mesh identity needs review' if is_mesh_entity(route.target) else '')
             active_note = '' if route.enabled else ' • DISABLED'
@@ -406,6 +419,76 @@ class LibreBeaconApp:
         self.route_records.pop(picked[0])
         self.refresh_routes()
         self.status.set('Contact removed locally. Save settings to keep this change.')
+
+    def open_mesh_reply_setup(self):
+        # This deserves its own window. The contacts tab was already getting
+        # taller than a modest laptop screen, never mind 150% magnification.
+        if not hasattr(self, 'reply_window') or not self.reply_window.winfo_exists():
+            self.reply_window = tk.Toplevel(self.root)
+            self.reply_window.title('Meshtastic replies - optional')
+            self.reply_window.minsize(590, 340)
+            panel = ttk.Frame(self.reply_window, padding=15)
+            panel.pack(fill='both', expand=True)
+            ttk.Label(panel, text='Optional two-way radio replies',
+                      font=('Segoe UI', 15, 'bold')).pack(anchor='w')
+            ttk.Label(panel, text='Enter your gateway node number from the Meshtastic app. '
+                      'Replies can be observed only while this Windows app is running and listening. '
+                      'They do not prove assistance.', wraplength=590).pack(anchor='w', pady=8)
+            ttk.Entry(panel, textvariable=self.gateway_node_text, width=27).pack(anchor='w', pady=6)
+            bar = ttk.Frame(panel); bar.pack(anchor='w', pady=8)
+            ttk.Button(bar, text='Save Gateway Node ID', command=self.save_mesh_reply_gateway).pack(side='left', padx=3)
+            ttk.Button(bar, text='Start Listening', command=self.start_mesh_reply_listener).pack(side='left', padx=3)
+            ttk.Button(bar, text='Stop Listening', command=self.stop_mesh_reply_listener).pack(side='left', padx=3)
+            ttk.Label(panel, textvariable=self.mesh_reply_state, wraplength=590).pack(anchor='w', pady=8)
+            ttk.Label(panel, text='Reply with the reference from the message, followed by OK or CANT. '
+                      'No messages are sent by this listener; no automatic escalation.',
+                      wraplength=590).pack(anchor='w')
+            ttk.Button(panel, text='Close', command=self.reply_window.destroy).pack(anchor='w', pady=12)
+        self.reply_window.lift()
+
+    def save_mesh_reply_gateway(self):
+        # Explicit identity is less convenient than guessing a gateway name.
+        # That's a price worth paying when a reply changes an alert's status.
+        try:
+            gateway = node_number(self.gateway_node_text.get())
+        except ValueError as exc:
+            messagebox.showerror('Gateway identity', str(exc)); return
+        self.gateway_node_text.set(str(gateway))
+        self.settings.mesh_gateway_node_id = str(gateway)
+        try:
+            self.settings.save()
+        except OSError:
+            messagebox.showerror('Gateway identity', 'Could not save gateway settings.'); return
+        self.status.set(f'Gateway identity saved: !{gateway:08x}. Confirm this in the Meshtastic app.')
+
+    def start_mesh_reply_listener(self):
+        if self.mesh_listener_active:
+            self.status.set('Already listening for radio replies.'); return
+        try:
+            gateway = node_number(self.gateway_node_text.get())
+            if str(gateway) != self.settings.mesh_gateway_node_id:
+                raise ValueError('Save the gateway node ID before starting.')
+            client = self.client()
+        except (ValueError, HomeAssistantError) as exc:
+            messagebox.showerror('Reply listener', str(exc)); return
+        self.mesh_listener_stop = Event()
+        self.mesh_listener_active = True
+        self.mesh_reply_state.set('Connecting to Home Assistant for replies…')
+        def background():
+            listen_for_replies(client.base_url, client.token, self.mesh_listener_stop,
+                               lambda event: self.queue.put(('mesh_reply_event', True, event)),
+                               lambda status: self.queue.put(('mesh_reply_status', True, status)))
+            self.queue.put(('mesh_reply_stopped', True, None))
+        Thread(target=background, daemon=True).start()
+
+    def stop_mesh_reply_listener(self):
+        self.mesh_listener_stop.set()
+        self.mesh_reply_state.set('Stopping reply listener…')
+
+    def close(self):
+        # Tk owns the main thread. Ask the socket to stop, then close the UI.
+        self.mesh_listener_stop.set()
+        self.root.destroy()
 
     def preview_mesh_messages(self):
         # Preview doesn't connect to a radio. Easier to read before setting
@@ -746,10 +829,29 @@ class LibreBeaconApp:
                     if hasattr(self, 'mesh_status_text'):
                         self.mesh_status_text.set(report)
                     self.status.set('Mesh gateway status checked. Read the status window; no message was sent.')
+                elif key=='mesh_reply_status':
+                    self.mesh_reply_state.set(result)
+                elif key=='mesh_reply_stopped':
+                    self.mesh_listener_active = False
+                    self.mesh_reply_state.set('Reply listener OFF. Restart to listen again.')
+                elif key=='mesh_reply_event':
+                    matched = self.mesh_replies.receive(result)
+                    if matched is not None:
+                        self.refresh_routes()
+                        self.mesh_reply_state.set('Matching radio reply observed for ' + matched.reference +
+                                                  '. This does not confirm assistance.')
                 elif key=='emergency_test':
                     destination, accepted, failure, reference = result
                     self.deliveries.record(destination, accepted=accepted, kind='test',
                                            error_type=failure, reference=reference)
+                    if accepted and reference:
+                        route = next((r for r in self.route_records if r.target == destination), None)
+                        if route is not None and route.mesh_node_id is not None:
+                            try:
+                                gateway = node_number(self.settings.mesh_gateway_node_id)
+                                self.mesh_replies.register(reference, destination, route.mesh_node_id, gateway, 'test')
+                            except ValueError:
+                                self.mesh_reply_state.set('No verified gateway ID: reply tracking is unavailable.')
                     self.refresh_routes()
                     self.status.set('Test request accepted; ask the recipient to reply.' if accepted
                                     else 'Contact test request failed; check destination and Home Assistant.')
@@ -758,9 +860,19 @@ class LibreBeaconApp:
                     targets = {r.label: r.target for r in self.route_records}
                     for label, accepted, detail, reference in result:
                         if label in targets:
-                            self.deliveries.record(targets[label], accepted=accepted,
+                            destination = targets[label]
+                            self.deliveries.record(destination, accepted=accepted,
                                                    kind='critical_low', error_type=detail if not accepted else '',
                                                    reference=reference)
+                            if accepted and reference:
+                                route = next((r for r in self.route_records if r.target == destination), None)
+                                if route is not None and route.mesh_node_id is not None:
+                                    try:
+                                        gateway = node_number(self.settings.mesh_gateway_node_id)
+                                        self.mesh_replies.register(reference, destination, route.mesh_node_id,
+                                                                   gateway, 'critical_low')
+                                    except ValueError:
+                                        self.mesh_reply_state.set('Gateway identity missing: reply tracking off.')
                     self.refresh_routes()
                     delivered = sum(1 for _, ok, _, _ in result if ok)
                     failed = sum(1 for _, ok, _, _ in result if not ok)

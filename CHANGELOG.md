@@ -1,3 +1,11 @@
+## 4.7.0 — Two-way mesh replies
+
+- Added an optional Home Assistant WebSocket listener for Meshtastic direct replies.
+- Matched incident reference, sender node, gateway and destination before recording a reply.
+- Rejected channel messages, expired references, duplicated replies and malformed events.
+- Added gateway identity and listener controls to the emergency-contact screen.
+- Replies are only session observations; they never cancel official Libre alarms or trigger escalation.
+
 # Changelog
 
 ## 4.6.0 — Mesh messaging

@@ -38,6 +38,7 @@ class Settings:
     emergency_contact_consent: bool = False
     include_glucose_in_messages: bool = False
     emergency_routes: list[dict] = field(default_factory=list)
+    mesh_gateway_node_id: str = ''  # Optional. A reply needs a specific known gateway.
 
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> 'Settings':

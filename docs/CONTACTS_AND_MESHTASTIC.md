@@ -56,3 +56,11 @@ Open **Start Here → Check Meshtastic Gateway Status** or **Emergency contacts 
 - **Recent/old observation:** a timestamp for the last packet Home Assistant recorded from the configured node. This is *not* a live reachability check. Missing or multiple matching timestamps are reported as unverified.
 
 The health screen is **diagnostic only**. It deliberately doesn't change contact consent, cancel official Libre alarms or silently re-route messages. The individual node ID check from v4.4.0 still runs before each mesh send. See [gateway health notes](MESH_GATEWAY_HEALTH.md).
+
+## Two-way radio replies (v4.7.0)
+
+In **Emergency contacts**, enter your gateway node number (decimal or `!` plus eight hex digits), press **Save Gateway Node ID**, then **Start Listening**. This opens a Home Assistant WebSocket event subscription while the Windows app is running. The package requires `websocket-client`; installer users get it with the application.
+
+After an accepted test or critical-low notification, the radio recipient can answer using the reference from that message, for example `LB-0123456789ABCDEF OK` or `LB-0123456789ABCDEF CANT`. The reference expires after 30 minutes. A reply from a channel, unexpected sender, different gateway or for an old reference does not count.
+
+The display says **matching radio reply observed**. It does not prove the person has read the message, holds the radio, or is on their way. If the app sleeps or closes, the listener stops and may miss messages. There is no replay from the Home Assistant event stream, no unattended service and no automatic escalation. This is an additional communication route, never a primary medical alarm.

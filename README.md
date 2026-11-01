@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.6.0** · experimental community prototype · MIT licence
+Current version: **4.7.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.6.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.7.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -178,3 +178,9 @@ The radio path has more moving parts than a standard notification. This release 
 - The current Windows program still needs to remain open and awake. A resident Home Assistant component might make more sense eventually, but then the duplicate-message logic needs revisiting first.
 
 **Still untested:** actual Libre readings, Windows assistive technology, live Meshtastic gateway telemetry and physical message delivery. Keep the official Libre monitoring and its alarms enabled.
+
+## Version 4.7.0 — Radio replies
+
+A selected Meshtastic contact can reply with its alert reference and `OK` or `CANT`. The new **Start Listening** button connects to Home Assistant’s authenticated event stream; you must enter and save your gateway’s node number first. Replies are displayed only when their reference, sender, destination and gateway match a request from this session. Closing Windows LibreBeacon loses pending reply state.
+
+This is **observation, not attendance**. There is no automatic escalation, nothing is sent as a result of a reply, and official Libre alerts remain untouched. In the future I want to tie this to a proper recipient-verification workflow and test it with two physical radios. A green tick from a packet is not a person at the door.

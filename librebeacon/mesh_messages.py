@@ -45,10 +45,10 @@ def build_mesh_message(kind: str, *, reference: str | None = None,
     if kind == 'test':
         if include_value or mmol is not None:
             raise ValueError('Test messages cannot contain glucose measurements')
-        body = f'TEST ONLY - LibreBeacon radio check {ref}. No emergency. Please confirm with the sender.'
+        body = f'TEST ONLY - LibreBeacon radio check {ref}. No emergency. Reply {ref} OK.'
     else:
         body = (f'LibreBeacon ALERT {ref}: Please check your nominated contact now. '
-                'Use your agreed plan. Reply using your usual contact method.')
+                'Use your agreed plan. Reply with the reference and OK or CANT if you can.')
         if include_value:
             if type(mmol) not in (int, float) or not isfinite(mmol) or not 0 < mmol <= 40:
                 raise ValueError('A valid glucose measurement is required for this message')
