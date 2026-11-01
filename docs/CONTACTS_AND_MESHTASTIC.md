@@ -64,3 +64,7 @@ In **Emergency contacts**, enter your gateway node number (decimal or `!` plus e
 After an accepted test or critical-low notification, the radio recipient can answer using the reference from that message, for example `LB-0123456789ABCDEF OK` or `LB-0123456789ABCDEF CANT`. The reference expires after 30 minutes. A reply from a channel, unexpected sender, different gateway or for an old reference does not count.
 
 The display says **matching radio reply observed**. It does not prove the person has read the message, holds the radio, or is on their way. If the app sleeps or closes, the listener stops and may miss messages. There is no replay from the Home Assistant event stream, no unattended service and no automatic escalation. This is an additional communication route, never a primary medical alarm.
+
+## Optional one-step backup (v4.8.0)
+
+See [backup-contact setup and limitations](MESH_FALLBACK.md). Backup messaging remains off by default, sends to a specifically chosen second individual radio node at most once in the running session and does not replace official Libre alarms.

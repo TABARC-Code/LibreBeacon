@@ -1,3 +1,11 @@
+## 4.8.0 — One optional backup mesh recipient
+
+- I added a separate backup-contact setup window, with explicit first and second radio recipients. It starts off disabled.
+- I kept phone and email contacts independent. When backup mode is enabled, I hold the other mesh recipients rather than sending everything at once.
+- A matching OK reply holds the backup; CANT can trigger it. A no-reply timeout works only while the reply listener stays connected.
+- I limited this to one backup request in the running session, with no automatic resend. Cancelling or changing settings stops any outstanding plan.
+- I added simulated-clock and consent checks; physical radio delivery is still untested.
+
 ## 4.7.0 — Two-way mesh replies
 
 - Added an optional Home Assistant WebSocket listener for Meshtastic direct replies.
