@@ -55,3 +55,9 @@ Working rule: update the README's *noticed → choice → next check* table when
 ## 4.5.0 — Gateway diagnostics
 
 `mesh_health.py` classifies Home Assistant gateway entities and last-heard node timestamps. It's read-only and doesn't attempt an over-the-air test. Keep observations separate from real notification receipts. We should bind gateway identities through the HA entity/device registries in a later release, rather than inferring an owner from a name or treating `last_changed` as a heartbeat. Testing with a single virtual gateway is easy; two real gateways and a weak signal will be far more revealing.
+
+## 4.9.0: reply-stream heartbeat
+
+I now send a Home Assistant WebSocket `ping` and require a matching `pong`. This closes the gap where an idle socket could stay apparently connected even though nothing was coming back. A lost listener cancels the no-reply backup. Keep the 20-second interval and 10-second deadline separate from radio-coverage claims: the HA server can answer while the gateway has fallen over.
+
+See [MESH_FIELD_TRIAL.md](MESH_FIELD_TRIAL.md) for what we still need to try with physical devices. Don't mark a mock connection as a receiver's acknowledgement.

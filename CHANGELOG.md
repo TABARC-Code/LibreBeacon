@@ -1,3 +1,10 @@
+## 4.9.0 — Radio listener heartbeat and field checklist
+
+- I added a Home Assistant WebSocket heartbeat with a bounded response deadline. A stalled reply listener now drops out instead of waiting indefinitely.
+- I kept stale, incorrect and late pong responses from making a dead connection look healthy. The existing backup cancellation handles a disconnected listener.
+- I added a field checklist for Windows, two radios, connectivity loss, consent and accessibility. Hardware results are still untested.
+- I corrected the README's outdated reply-status wording and kept the source, installer and package versions together.
+
 ## 4.8.0 — One optional backup mesh recipient
 
 - I added a separate backup-contact setup window, with explicit first and second radio recipients. It starts off disabled.

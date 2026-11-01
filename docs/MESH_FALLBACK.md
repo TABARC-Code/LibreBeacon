@@ -23,3 +23,9 @@ This is a small staged contact route, not a replacement medical alarm. Home Assi
 Everything is in memory. This is deliberately conservative but it means no unattended escalation. The next iteration should test recipient identity changes, Windows sleep, queue timing and real radios. The Windows interface still needs a screen-reader pass.
 
 I considered falling back to a channel broadcast when the recipient vanished. No. That would send private information to people who never consented.
+
+## Connection watchdog (v4.9.0)
+
+The reply listener sends an authenticated Home Assistant WebSocket ping about every 20 seconds and requires the matching pong inside 10 seconds. A missing, wrong or late answer drops the listener. That prevents a **no reply** fallback from continuing while the connection is quietly dead. It is not a radio-delivery test. Disconnecting the gateway may still leave the Home Assistant WebSocket healthy; use the gateway diagnostics too.
+
+My next check is actual Windows sleep and radio loss, recorded in [the field checklist](MESH_FIELD_TRIAL.md). Until then keep automatic backup switched off unless you understand the limitations.

@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.8.0** · experimental community prototype · MIT licence
+Current version: **4.9.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.8.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.9.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -50,7 +50,7 @@ By default, emergency contact messages do **not** include an exact glucose value
 
 ## Meshtastic messages (v4.6.0)
 
-The optional radio contact route now uses **short, labelled messages** rather than forwarding a long email-style alert. A contact can preview the templates and send a clearly marked **TEST ONLY** message. Each radio request carries a random reference such as `LB-0123456789ABCDEF`, shown locally when Home Assistant accepts the request. There is **no automatic reply matching or escalation** yet.
+The optional radio contact route now uses **short, labelled messages** rather than forwarding a long email-style alert. A contact can preview the templates and send a clearly marked **TEST ONLY** message. Each radio request carries a random reference such as `LB-0123456789ABCDEF`, shown locally when Home Assistant accepts the request. Replies can be matched to a verified incident while the optional listener runs; a separate one-time backup is available only when enabled. Neither is a guarantee of help.
 
 - One expressly approved `notify.mesh_*` node, with its pinned node identity checked immediately before each send.
 - Conservative 180-byte UTF-8 message limit; no automatic public-channel fallback or repeated send loop.
@@ -73,6 +73,7 @@ Windows Phone Link may mirror the official Libre phone notifications, but LibreB
 - [Windows and Home Assistant: start here](docs/SETUP.md)
 - [Adding contacts, including Meshtastic](docs/CONTACTS_AND_MESHTASTIC.md)
 - [Understanding Meshtastic gateway checks](docs/MESH_GATEWAY_HEALTH.md)
+- [Meshtastic field-test checklist](docs/MESH_FIELD_TRIAL.md)
 - [Accessibility and testing notes](docs/ACCESSIBILITY.md)
 - [Architecture and contributor extension points](docs/ARCHITECTURE.md)
 - [Example Home Assistant scripts](docs/EXAMPLE_SCRIPTS.yaml)
@@ -90,6 +91,12 @@ No live messages are sent by this test suite. The [contribution guide](CONTRIBUT
 
 LibreBeacon is independent, unaffiliated software. Abbott, FreeStyle Libre, LibreLinkUp, Home Assistant, Meshtastic and Microsoft are trademarks or projects belonging to their respective owners. See [references](docs/REFERENCES.md).
 
+
+## 4.9.0: listening has to mean listening
+
+The Home Assistant reply socket now sends a small ping every 20 seconds and expects the matching pong within 10. No response, wrong response or late response means the listener drops out. Pending no-reply backup messaging cancels instead of silently trusting a dead socket. The check watches **Home Assistant**, not the radios or the recipient. Those are different failure points, however tempting the green tick might be.
+
+I added a [hands-on Meshtastic trial checklist](docs/MESH_FIELD_TRIAL.md) for a Windows machine, the gateway and two actual receivers. It starts with harmless test messages, records what really happened and marks all hardware results untested until somebody performs them. Next job: collect actual gateway and radio observations, fix anything that fails and revisit whether the fallback is worth the complexity.
 
 ## 4.8.0: one backup radio contact, if wanted
 
@@ -190,8 +197,8 @@ The radio path has more moving parts than a standard notification. This release 
 
 **Still untested:** actual Libre readings, Windows assistive technology, live Meshtastic gateway telemetry and physical message delivery. Keep the official Libre monitoring and its alarms enabled.
 
-## Version 4.8.0 — Radio replies
+## Version 4.7.0 — Radio replies
 
 A selected Meshtastic contact can reply with its alert reference and `OK` or `CANT`. The new **Start Listening** button connects to Home Assistant’s authenticated event stream; you must enter and save your gateway’s node number first. Replies are displayed only when their reference, sender, destination and gateway match a request from this session. Closing Windows LibreBeacon loses pending reply state.
 
-This is **observation, not attendance**. There is no automatic escalation, nothing is sent as a result of a reply, and official Libre alerts remain untouched. In the future I want to tie this to a proper recipient-verification workflow and test it with two physical radios. A green tick from a packet is not a person at the door.
+This is **observation, not attendance**. The replies themselves never resolve official Libre alarms. Since v4.8.0, a separately enabled and consented backup can react to `CANT` or an unanswered timer, but there is no repeat loop. We still need a proper field trial with two physical radios. A green tick from a packet is not a person at the door.
