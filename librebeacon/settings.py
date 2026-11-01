@@ -39,6 +39,10 @@ class Settings:
     include_glucose_in_messages: bool = False
     emergency_routes: list[dict] = field(default_factory=list)
     mesh_gateway_node_id: str = ''  # Optional. A reply needs a specific known gateway.
+    mesh_fallback_enabled: bool = False
+    mesh_fallback_primary: str = ''
+    mesh_fallback_backup: str = ''
+    mesh_fallback_minutes: int = 10
 
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> 'Settings':

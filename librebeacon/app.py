@@ -22,6 +22,7 @@ from .mesh_health import discover_gateways, gateway_summary, node_last_heard
 from .mesh_messages import build_mesh_message
 from .mesh_replies import MeshReplyTracker, node_number
 from .mesh_stream import listen_for_replies
+from .mesh_fallback import MeshFallback
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -42,6 +43,9 @@ class LibreBeaconApp:
         self.health = ConnectionHealth()
         self.deliveries = DeliveryTracker()
         self.mesh_replies = MeshReplyTracker()
+        self.mesh_fallback = MeshFallback()
+        self.mesh_listener_ready = False
+        self.last_fallback_tick = time.monotonic()
         self.mesh_listener_stop = Event()
         self.mesh_listener_active = False
         self.queue: Queue = Queue()
@@ -315,7 +319,8 @@ class LibreBeaconApp:
         self.gateway_node_text = self.var('mesh_gateway_node_id')
         self.mesh_reply_state = tk.StringVar(value='Reply listener OFF')
         ttk.Button(box, text='Set Up Meshtastic Replies', command=self.open_mesh_reply_setup).pack(anchor='w', pady=4)
-        ttk.Button(box, text='Check Mesh Gateway Status', command=self.check_mesh_health).pack(anchor='w', pady=4)
+        ttk.Button(box, text='Set Up Backup Contact', command=self.open_mesh_fallback_setup).pack(anchor='w', pady=4)
+
         ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
         self.delivery_report = tk.StringVar()
         ttk.Label(box, textvariable=self.delivery_report, wraplength=790,
@@ -338,6 +343,94 @@ class LibreBeaconApp:
                   'identities are listed. Check the node ID with the owner. Old contacts need re-adding. '
                   'Radio receipt is never proof of a reply.',
                   wraplength=790).pack(anchor='w', pady=4)
+
+    def open_mesh_fallback_setup(self):
+        """Don't squeeze another dozen widgets into the already crowded tab."""
+        if not hasattr(self, 'fallback_window') or not self.fallback_window.winfo_exists():
+            self.fallback_window = tk.Toplevel(self.root)
+            self.fallback_window.title('Meshtastic backup contact - optional')
+            self.fallback_window.geometry('700x510')
+            box = ttk.Frame(self.fallback_window, padding=15)
+            box.pack(fill='both', expand=True)
+            ttk.Label(box, text='One backup radio contact', font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+            ttk.Label(box, text='This is optional. First connect Home Assistant and start the radio reply listener. '
+                      'Only one second contact is attempted, and only while this Windows app is awake. '
+                      'If listening drops, unanswered-message escalation stops.',
+                      wraplength=640).pack(anchor='w', pady=6)
+            active = [r.target for r in self.route_records if r.enabled and r.consent and
+                      is_mesh_entity(r.target) and r.mesh_node_id is not None]
+            self.fallback_enabled = self.var('mesh_fallback_enabled', 'bool')
+            ttk.Checkbutton(box, text='Enable one automatic backup request (off by default)',
+                            variable=self.fallback_enabled).pack(anchor='w', pady=7)
+            primary = self.var('mesh_fallback_primary')
+            backup = self.var('mesh_fallback_backup')
+            for name, variable in [('First Meshtastic contact', primary), ('Backup Meshtastic contact', backup)]:
+                ttk.Label(box, text=name).pack(anchor='w', pady=(5, 1))
+                ttk.Combobox(box, textvariable=variable, values=active, state='readonly', width=55).pack(anchor='w')
+            ttk.Label(box, text='Fallback wait (2 to 20 minutes)').pack(anchor='w', pady=(8, 1))
+            ttk.Combobox(box, textvariable=self.var('mesh_fallback_minutes'), state='readonly',
+                         values=[str(i) for i in (2, 5, 10, 15, 20)], width=8).pack(anchor='w')
+            ttk.Label(box, text='The first contact gets the normal critical-low request. The backup is '
+                      'withheld until CANT is observed or the reply timer expires. An OK reply stops the '
+                      'backup. A request accepted by Home Assistant is not proof of delivery. '
+                      'Phone and email routes are unchanged.', wraplength=640).pack(anchor='w', pady=10)
+            self.fallback_status_text = tk.StringVar(value=self.mesh_fallback.describe())
+            ttk.Label(box, textvariable=self.fallback_status_text, wraplength=640).pack(anchor='w')
+            row = ttk.Frame(box); row.pack(anchor='w', pady=10)
+            ttk.Button(row, text='Save Backup Settings', command=self.save_general).pack(side='left', padx=3)
+            ttk.Button(row, text='Cancel Pending Backup', command=self.cancel_mesh_fallback).pack(side='left', padx=3)
+            ttk.Button(row, text='Close', command=self.fallback_window.destroy).pack(side='left', padx=3)
+        self.fallback_window.lift()
+
+    def cancel_mesh_fallback(self):
+        self.mesh_fallback.cancel()
+        if hasattr(self, 'fallback_status_text'):
+            self.fallback_status_text.set(self.mesh_fallback.describe())
+        self.status.set('Pending backup cancelled. This does not change the official Libre alarm.')
+
+    def check_mesh_fallback(self):
+        if not hasattr(self, 'mesh_fallback'):
+            return
+        now = time.monotonic()
+        lag = now - self.last_fallback_tick
+        self.last_fallback_tick = now
+        pending = self.mesh_fallback.pending
+        if pending is None:
+            return
+        # Don't wake from sleep and interpret a gap as a genuine no-reply.
+        if lag > 5:
+            self.mesh_fallback.cancel('App paused or slept; pending backup cancelled.')
+            if hasattr(self, 'fallback_status_text'):
+                self.fallback_status_text.set(self.mesh_fallback.describe())
+            return
+        # The listener must have remained connected for a no-reply timeout.
+        # A radio that never answered is not evidence that a person needs help.
+        backup = self.mesh_fallback.due(now=now,
+                                        listener_ready=self.mesh_listener_ready)
+        if hasattr(self, 'fallback_status_text'):
+            self.fallback_status_text.set(self.mesh_fallback.describe())
+        if not backup:
+            return
+        # Check CURRENT consent/config, not the old snapshot that armed us.
+        try:
+            routes = read_routes(self.settings.emergency_routes)
+            route = next(r for r in routes if r.target == backup and r.enabled and r.consent
+                         and r.mesh_node_id is not None and is_mesh_entity(r.target))
+            if not self.settings.mesh_fallback_enabled or self.settings.mesh_fallback_backup != backup:
+                raise ValueError('Backup settings changed or disabled')
+            client = self.client()
+        except (StopIteration, ValueError, HomeAssistantError):
+            self.mesh_fallback.sent(accepted=False)
+            self.status.set('Backup not sent: recipient settings or Home Assistant connection changed.')
+            return
+        def send_one():
+            from .contacts import dispatch_route
+            try:
+                ref = dispatch_route(client, route, emergency_message(), mesh_kind='critical_low')
+                return route.target, True, '', ref
+            except Exception as exc:
+                return route.target, False, exc.__class__.__name__, ''
+        self.start('mesh_fallback_delivery', send_one)
 
     def refresh_routes(self):
         self.route_list.delete(0, tk.END)
@@ -473,6 +566,7 @@ class LibreBeaconApp:
             messagebox.showerror('Reply listener', str(exc)); return
         self.mesh_listener_stop = Event()
         self.mesh_listener_active = True
+        self.mesh_listener_ready = False
         self.mesh_reply_state.set('Connecting to Home Assistant for replies…')
         def background():
             listen_for_replies(client.base_url, client.token, self.mesh_listener_stop,
@@ -482,12 +576,16 @@ class LibreBeaconApp:
         Thread(target=background, daemon=True).start()
 
     def stop_mesh_reply_listener(self):
+        self.mesh_listener_ready = False
+        self.mesh_fallback.cancel('Reply listener stopped. Pending backup cancelled.')
         self.mesh_listener_stop.set()
         self.mesh_reply_state.set('Stopping reply listener…')
 
     def close(self):
         # Tk owns the main thread. Ask the socket to stop, then close the UI.
         self.mesh_listener_stop.set()
+        self.mesh_listener_ready = False
+        self.mesh_fallback.cancel('Windows app closed. Pending backup cancelled.')
         self.root.destroy()
 
     def preview_mesh_messages(self):
@@ -576,8 +674,9 @@ class LibreBeaconApp:
         from dataclasses import fields
         bool_names={'enabled','enable_sound','enable_visual','enable_speech','enable_ha_visual',
                     'enable_contacts','contact_consent','large_text','pulse_visual',
-                    'enable_emergency_contacts','emergency_contact_consent','include_glucose_in_messages'}
-        int_names={'freshness_minutes','poll_seconds','cooldown_minutes'}
+                    'enable_emergency_contacts','emergency_contact_consent','include_glucose_in_messages',
+                    'mesh_fallback_enabled'}
+        int_names={'freshness_minutes','poll_seconds','cooldown_minutes','mesh_fallback_minutes'}
         values={}
         for f in fields(Settings):
             raw=self.variables[f.name].get() if f.name in self.variables else getattr(self.settings,f.name)
@@ -599,6 +698,18 @@ class LibreBeaconApp:
             raise ValueError('Pause must be 1–1440 minutes')
         from .contacts import read_routes
         routes = read_routes(s.emergency_routes)
+        if type(s.mesh_fallback_enabled) is not bool or type(s.mesh_fallback_minutes) is not int or not 2 <= s.mesh_fallback_minutes <= 20:
+            raise ValueError('Invalid backup settings')
+        if s.mesh_fallback_enabled:
+            MeshFallback.validate(s.mesh_fallback_primary, s.mesh_fallback_backup, s.mesh_fallback_minutes)
+            targets = {r.target for r in routes if r.enabled and r.consent and
+                       is_mesh_entity(r.target) and r.mesh_node_id is not None}
+            if not s.enable_emergency_contacts or s.mesh_fallback_primary not in targets or s.mesh_fallback_backup not in targets:
+                raise ValueError('Enable emergency messaging and choose two approved individual mesh contacts')
+            try:
+                node_number(s.mesh_gateway_node_id)
+            except ValueError as exc:
+                raise ValueError('Save the verified Meshtastic gateway node ID first') from exc
         if s.enable_emergency_contacts:
             if not s.emergency_contact_consent or not any(r.enabled and r.consent for r in routes):
                 raise ValueError('Enable at least one consented contact and accept the delivery warning')
@@ -631,6 +742,7 @@ class LibreBeaconApp:
         try:
             s=self.collect();self.validate(s)
             s.save();self.settings=s
+            self.mesh_fallback.cancel('Settings changed. Pending backup cancelled.')
             self.status.set('Settings saved. Live changes apply on the next reading.')
             self.refresh_setup()
         except (ValueError, OSError) as exc:
@@ -677,6 +789,7 @@ class LibreBeaconApp:
             self.settings.save()
         except OSError:
             messagebox.showwarning('Settings', 'Token removed, but alert settings could not be saved.')
+        self.mesh_fallback.cancel('Home Assistant token removed. Pending backup cancelled.')
         self.refresh_setup()
         if os.getenv('LIBREBEACON_HA_TOKEN'):
             self.status.set('Saved token removed, but an environment token is still set. Remove it separately.')
@@ -770,6 +883,7 @@ class LibreBeaconApp:
                 self.busy_poll=False
                 self.status.set(str(exc))
         self.update_health_display()
+        self.check_mesh_fallback()
         self.root.after(1000,self.periodic)
 
     def process_queue(self):
@@ -830,13 +944,20 @@ class LibreBeaconApp:
                         self.mesh_status_text.set(report)
                     self.status.set('Mesh gateway status checked. Read the status window; no message was sent.')
                 elif key=='mesh_reply_status':
+                    self.mesh_listener_ready = (self.mesh_listener_active and not self.mesh_listener_stop.is_set() and
+                        result == 'Listening for Meshtastic replies; Windows must remain awake')
+                    if not self.mesh_listener_ready:
+                        self.mesh_fallback.cancel('Reply listener unavailable. Pending backup cancelled.')
                     self.mesh_reply_state.set(result)
                 elif key=='mesh_reply_stopped':
                     self.mesh_listener_active = False
+                    self.mesh_listener_ready = False
+                    self.mesh_fallback.cancel('Reply listener stopped. Pending backup cancelled.')
                     self.mesh_reply_state.set('Reply listener OFF. Restart to listen again.')
                 elif key=='mesh_reply_event':
                     matched = self.mesh_replies.receive(result)
                     if matched is not None:
+                        self.mesh_fallback.reply(matched.reference, matched.destination, matched.response)
                         self.refresh_routes()
                         self.mesh_reply_state.set('Matching radio reply observed for ' + matched.reference +
                                                   '. This does not confirm assistance.')
@@ -855,6 +976,24 @@ class LibreBeaconApp:
                     self.refresh_routes()
                     self.status.set('Test request accepted; ask the recipient to reply.' if accepted
                                     else 'Contact test request failed; check destination and Home Assistant.')
+                elif key=='mesh_fallback_delivery':
+                    destination, accepted, failure, reference = result
+                    self.mesh_fallback.sent(accepted=accepted)
+                    self.deliveries.record(destination, accepted=accepted, kind='critical_low',
+                                           error_type=failure, reference=reference)
+                    if accepted and reference:
+                        route = next((r for r in self.route_records if r.target == destination), None)
+                        if route is not None and route.mesh_node_id is not None:
+                            try:
+                                gateway = node_number(self.settings.mesh_gateway_node_id)
+                                self.mesh_replies.register(reference, destination, route.mesh_node_id,
+                                                           gateway, 'critical_low')
+                            except ValueError:
+                                self.mesh_reply_state.set('Backup request accepted; reply tracking unavailable.')
+                    self.refresh_routes()
+                    if hasattr(self, 'fallback_status_text'):
+                        self.fallback_status_text.set(self.mesh_fallback.describe())
+                    self.status.set(self.mesh_fallback.describe())
                 elif key=='emergency_delivery':
                     # The service's acknowledgement is not a person's reply.
                     targets = {r.label: r.target for r in self.route_records}
@@ -873,6 +1012,22 @@ class LibreBeaconApp:
                                                                    gateway, 'critical_low')
                                     except ValueError:
                                         self.mesh_reply_state.set('Gateway identity missing: reply tracking off.')
+                    # Only arm after the primary request has actually been accepted.
+                    # Backups are otherwise held; the status tells the operator why.
+                    if self.settings.mesh_fallback_enabled:
+                        primary = self.settings.mesh_fallback_primary
+                        backup = self.settings.mesh_fallback_backup
+                        name = next((r.label for r in self.route_records if r.target == primary), None)
+                        sent = next(((ok, ref) for label, ok, _, ref in result if label == name), None)
+                        if sent and sent[0] and sent[1] and self.mesh_listener_ready:
+                            try:
+                                self.mesh_fallback.arm(primary, backup, sent[1],
+                                    minutes=self.settings.mesh_fallback_minutes, now=time.monotonic(),
+                                    listener_ready=True)
+                            except ValueError:
+                                self.mesh_fallback.cancel('Invalid backup settings; no backup scheduled.')
+                        else:
+                            self.mesh_reply_state.set('Backup not scheduled: no accepted primary request or listener unavailable.')
                     self.refresh_routes()
                     delivered = sum(1 for _, ok, _, _ in result if ok)
                     failed = sum(1 for _, ok, _, _ in result if not ok)
@@ -919,6 +1074,15 @@ class LibreBeaconApp:
         if self.settings.enable_ha_visual:self.send_script(self.settings.visual_script,event,message)
         if event == 'critical_low' and self.settings.enable_emergency_contacts:
             routes = read_routes(self.settings.emergency_routes)
+            # Hold the specifically nominated second node, not every other
+            # phone/email contact. Those remain independent of this radio plan.
+            if self.settings.mesh_fallback_enabled:
+                # Only the chosen first radio gets this alert now. I don't
+                # want a third mesh contact accidentally jumping the queue.
+                routes = [r for r in routes if not is_mesh_entity(r.target) or
+                          r.target == self.settings.mesh_fallback_primary]
+                if not self.mesh_listener_ready:
+                    self.status.set('Radio reply listener unavailable: backup held, no automatic follow-up.')
             text = emergency_message(self.settings.include_glucose_in_messages, mmol)
             try: client = HomeAssistant(self.settings.ha_url, self.session_token or load_token())
             except HomeAssistantError as exc:
