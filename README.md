@@ -3,6 +3,34 @@
 **Accessible glucose notifications for Windows and Home Assistant.**  
 Current version: **4.10.0** · experimental community prototype · MIT licence
 
+---
+ok note I edited and refud this with llm. (before anyone ats me. Dyslexic, and I ramble. it was 5 sides of a A4. it cut down)
+---
+
+## Notice
+### ⚠️ Work in Progress (WIP)
+
+**This project is still very much a work in progress.** Things will change, bits might break, and some features probably won't behave quite as intended. That's part of development.
+
+It needs plenty of real-world testing, user feedback and, frankly, people willing to poke around and find things I've missed.
+
+**Contributions, ideas and feedback are welcome.** If you spot a bug, have a suggestion, see something that could work better, or fancy helping with development, please get involved.
+
+Feel free to add notes, suggest improvements, contribute code, experiment with features or carry out testing. Even small observations can be useful. Sometimes the oddest suggestion turns out to be worth pursuing.
+
+**A few things worth bearing in mind:**
+- Expect unfinished features, bugs and occasional changes of direction.
+- Report problems, preferably with enough detail to reproduce them.
+- Suggest improvements or entirely new ideas. Nothing's necessarily set in stone.
+- Test what you can, whenever you can. Different setups often reveal different problems.
+- Contributions are welcome, but changes still need reviewing before they're incorporated.
+
+This isn't a finished, polished release, and I'm not pretending otherwise. It's an ongoing project that'll improve through experimentation, practical use and contributions from the people actually using it.
+
+**Have a look, have a play, and let me know what you find.**
+
+---
+
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
 The emergency contact screen is designed around buttons rather than code. Add a name, choose a Home Assistant notification destination, test it, and decide whether automatic contact messages should be enabled. Supported destinations include an individual **Meshtastic** node if its Home Assistant integration exposes a `notify.*` entity.
