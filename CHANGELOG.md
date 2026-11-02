@@ -1,3 +1,10 @@
+## 4.10.0 - Safe mesh backup rehearsal
+
+- I added a button-led rehearsal for the main fallback cases using fictional nodes and a fixed clock.
+- The preview shows whether a backup would be tried, including OK, CANT, listener loss, sleep and expiry decisions.
+- I kept the rehearsal away from live contacts, Home Assistant and the message sender. It cannot transmit anything.
+- I've linked a short guide from the README. Actual Windows sleep and radio behaviour remain for the field trial.
+
 ## 4.9.0 — Radio listener heartbeat and field checklist
 
 - I added a Home Assistant WebSocket heartbeat with a bounded response deadline. A stalled reply listener now drops out instead of waiting indefinitely.

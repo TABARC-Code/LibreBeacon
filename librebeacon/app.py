@@ -23,6 +23,7 @@ from .mesh_messages import build_mesh_message
 from .mesh_replies import MeshReplyTracker, node_number
 from .mesh_stream import listen_for_replies
 from .mesh_fallback import MeshFallback
+from .mesh_simulation import SCENARIOS, simulate_fallback
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -167,6 +168,8 @@ class LibreBeaconApp:
             ttk.Button(p, text=label, command=lambda target=tab: self.tabs.select(target)).pack(
                 fill='x', anchor='w', pady=2)
         ttk.Button(p, text='Check Meshtastic Gateway Status', command=self.check_mesh_health).pack(
+            fill='x', anchor='w', pady=3)
+        ttk.Button(p, text='Practise Mesh Backup (Simulation Only)', command=self.open_mesh_simulation).pack(
             fill='x', anchor='w', pady=3)
         ttk.Button(p, text='Check Saved Setup', command=self.refresh_setup).pack(anchor='w', pady=10)
         self.setup_report = tk.StringVar()
@@ -320,6 +323,7 @@ class LibreBeaconApp:
         self.mesh_reply_state = tk.StringVar(value='Reply listener OFF')
         ttk.Button(box, text='Set Up Meshtastic Replies', command=self.open_mesh_reply_setup).pack(anchor='w', pady=4)
         ttk.Button(box, text='Set Up Backup Contact', command=self.open_mesh_fallback_setup).pack(anchor='w', pady=4)
+        ttk.Button(box, text='Run Safe Mesh Simulation', command=self.open_mesh_simulation).pack(anchor='w', pady=4)
 
         ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
         self.delivery_report = tk.StringVar()
@@ -381,6 +385,49 @@ class LibreBeaconApp:
             ttk.Button(row, text='Cancel Pending Backup', command=self.cancel_mesh_fallback).pack(side='left', padx=3)
             ttk.Button(row, text='Close', command=self.fallback_window.destroy).pack(side='left', padx=3)
         self.fallback_window.lift()
+
+    def open_mesh_simulation(self):
+        """A read-only rehearsal. No contacts, sensors or client involved.
+
+        I'd rather let somebody see a failure before they rely on a backup.
+        This uses fixed imaginary contacts, not the user's settings.
+        """
+        if not hasattr(self, 'simulation_window') or not self.simulation_window.winfo_exists():
+            self.simulation_window = tk.Toplevel(self.root)
+            self.simulation_window.title('Mesh backup rehearsal - NO MESSAGES SENT')
+            self.simulation_window.geometry('790x560')
+            box = ttk.Frame(self.simulation_window, padding=16)
+            box.pack(fill='both', expand=True)
+            ttk.Label(box, text='Safe Meshtastic rehearsal',
+                      font=('Segoe UI', 17, 'bold')).pack(anchor='w')
+            ttk.Label(box, text='SIMULATION ONLY. Uses invented nodes and a simulated clock. '
+                      'No Home Assistant connection, glucose reading, message or saved setting is used.',
+                      wraplength=730).pack(anchor='w', pady=8)
+            self.simulation_scenario = tk.StringVar(value=SCENARIOS[0])
+            ttk.Label(box, text='Choose an example').pack(anchor='w')
+            ttk.Combobox(box, textvariable=self.simulation_scenario, values=SCENARIOS,
+                         state='readonly', width=44).pack(anchor='w', pady=5)
+            self.simulation_output = tk.Text(box, wrap='word', height=15,
+                                              font=('Consolas', max(11, self.accessible_size - 1)))
+            self.simulation_output.pack(fill='both', expand=True, pady=8)
+            self.simulation_output.configure(state='disabled')
+            row = ttk.Frame(box)
+            row.pack(anchor='w')
+            ttk.Button(row, text='Run Simulation', command=self.run_mesh_simulation).pack(side='left', padx=4)
+            ttk.Button(row, text='Close', command=self.simulation_window.destroy).pack(side='left', padx=4)
+            ttk.Label(box, text='These examples check decisions, not radio range, message receipt or '
+                      'real emergency handling. Keep the official Libre alarms enabled.',
+                      wraplength=730).pack(anchor='w', pady=8)
+            self.run_mesh_simulation()
+        self.simulation_window.lift()
+
+    def run_mesh_simulation(self):
+        # Keep the readout unambiguous. This doesn't call self.client() or dispatch_route().
+        result = simulate_fallback(self.simulation_scenario.get())
+        self.simulation_output.configure(state='normal')
+        self.simulation_output.delete('1.0', tk.END)
+        self.simulation_output.insert('1.0', result.text)
+        self.simulation_output.configure(state='disabled')
 
     def cancel_mesh_fallback(self):
         self.mesh_fallback.cancel()

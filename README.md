@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.9.0** · experimental community prototype · MIT licence
+Current version: **4.10.0** · experimental community prototype · MIT licence
 
 LibreBeacon adds a second, optional layer of accessibility around existing FreeStyle Libre monitoring. Rather than interfere with the sensor, it reads the glucose and *actual measurement time* from Home Assistant, where a LibreLinkUp integration is already installed. It can show larger readings, play local sounds, speak a warning and trigger compatible lights or contact messages.
 
@@ -12,7 +12,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.9.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.10.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -41,7 +41,7 @@ A Windows build workflow now also packages a per-user installer. **No tested Win
 | Sensors | Find glucose sensors, select measurement timestamp, test reading |
 | Accessibility | Choose and test one of three audible patterns; steady visual notice by default, optional slow pulse; larger text |
 | Alerts | Select and test a Home Assistant lighting script; older contact-script support |
-| Emergency contacts | Find destinations, Show Mesh Nodes, check gateway, add/test contacts, review replies and set up one optional backup recipient |
+| Emergency contacts | Find destinations, Show Mesh Nodes, check gateway, add/test contacts, review replies, practise a backup without sending and set up one optional backup recipient |
 | Alert rules | Set ordinary low and high thresholds, optional critical-low threshold, age and check interval |
 
 **Contact sending is off by default.** Consent is required for every recipient and for enabling automatic critical-low messages. Thresholds deliberately have no default. A configured critical-low alert is distinct from an ordinary low alert, so a reading moving into the critical band can generate an additional event even during an existing low episode. Multiple contact requests are attempted independently; a failed request to one destination need not stop another. That still doesn't confirm actual delivery.
@@ -60,6 +60,12 @@ The optional radio contact route now uses **short, labelled messages** rather th
 
 [Plain-English message guide](docs/MESH_MESSAGING.md). The radio remains dependent on Home Assistant and a configured gateway. No message-delivery guarantees are made.
 
+## Safe mesh backup rehearsal (v4.10.0)
+
+I added a **simulation-only** window to the Start Here and Emergency contacts screens. It runs the real fallback decision rules against made-up contacts and a fixed clock, without loading saved contacts or opening a Home Assistant connection. Try an OK reply, CANT, timeout, listener loss, Windows sleep or an expired request. No notification is sent. The simulated backup result says **WOULD TRY**, not delivered. See [rehearsal guide](docs/MESH_SIMULATION.md).
+
+This is useful for explaining the decisions; it isn't a replacement for a Windows and physical-radio field trial.
+
 ## What does and doesn't work yet
 
 **Implemented in source and checked with automated tests:** Home Assistant REST client, secure local token-store integration, desktop setup screens, sensor selection, measurement timestamp checks, ordinary/critical-low detection, duplicate suppression, sound, Windows speech, desktop visual notice, Home Assistant scripts, and opt-in notification targets. A Linux virtual-display smoke test can instantiate the desktop interface.
@@ -74,6 +80,7 @@ Windows Phone Link may mirror the official Libre phone notifications, but LibreB
 - [Adding contacts, including Meshtastic](docs/CONTACTS_AND_MESHTASTIC.md)
 - [Understanding Meshtastic gateway checks](docs/MESH_GATEWAY_HEALTH.md)
 - [Meshtastic field-test checklist](docs/MESH_FIELD_TRIAL.md)
+- [Safe mesh backup rehearsal](docs/MESH_SIMULATION.md)
 - [Accessibility and testing notes](docs/ACCESSIBILITY.md)
 - [Architecture and contributor extension points](docs/ARCHITECTURE.md)
 - [Example Home Assistant scripts](docs/EXAMPLE_SCRIPTS.yaml)
