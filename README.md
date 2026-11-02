@@ -66,6 +66,8 @@ I added a **simulation-only** window to the Start Here and Emergency contacts sc
 
 This is useful for explaining the decisions; it isn't a replacement for a Windows and physical-radio field trial.
 
+**Next idea (not yet built):** a [guided real-device check](docs/MESH_FIELD_WIZARD_IDEA.md) using the existing field-trial cases, with recipient confirmation, a deliberate TEST ONLY send and a local result report. No automatic sending or new alarm behaviour.
+
 ## What does and doesn't work yet
 
 **Implemented in source and checked with automated tests:** Home Assistant REST client, secure local token-store integration, desktop setup screens, sensor selection, measurement timestamp checks, ordinary/critical-low detection, duplicate suppression, sound, Windows speech, desktop visual notice, Home Assistant scripts, and opt-in notification targets. A Linux virtual-display smoke test can instantiate the desktop interface.
@@ -80,6 +82,7 @@ Windows Phone Link may mirror the official Libre phone notifications, but LibreB
 - [Adding contacts, including Meshtastic](docs/CONTACTS_AND_MESHTASTIC.md)
 - [Understanding Meshtastic gateway checks](docs/MESH_GATEWAY_HEALTH.md)
 - [Meshtastic field-test checklist](docs/MESH_FIELD_TRIAL.md)
+- [Guided real-device check idea — needs testing](docs/MESH_FIELD_WIZARD_IDEA.md)
 - [Safe mesh backup rehearsal](docs/MESH_SIMULATION.md)
 - [Accessibility and testing notes](docs/ACCESSIBILITY.md)
 - [Architecture and contributor extension points](docs/ARCHITECTURE.md)
