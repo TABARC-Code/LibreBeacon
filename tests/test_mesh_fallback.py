@@ -1,6 +1,7 @@
 """Mock clocks and destinations. No actual contact should hear a thing."""
 import unittest
-from librebeacon.mesh_fallback import MeshFallback
+from librebeacon.mesh_fallback import MeshFallback, require_backup_send
+from librebeacon.contacts import ContactRoute
 from librebeacon.settings import Settings
 
 REF = 'LB-0123456789ABCDEF'
@@ -34,8 +35,8 @@ class FallbackTests(unittest.TestCase):
 
     def test_cant_triggers_one_fallback(self):
         self.f.reply(REF, 'notify.mesh_one', 'CANT')
-        self.assertEqual(self.f.due(now=1010, listener_ready=False), 'notify.mesh_two')
-        self.assertIsNone(self.f.due(now=1011, listener_ready=False))
+        self.assertEqual(self.f.due(now=1010, listener_ready=True), 'notify.mesh_two')
+        self.assertIsNone(self.f.due(now=1011, listener_ready=True))
 
     def test_wrong_reply_cannot_cancel(self):
         for reference,destination,response in ((REF,'notify.mesh_two','OK'),('LB-FFFFFFFFFFFFFFFF','notify.mesh_one','OK'),(REF,'notify.mesh_one','UNKNOWN')):
@@ -71,3 +72,136 @@ class FallbackTests(unittest.TestCase):
         self.assertIsNone(self.f.due(now=1800,listener_ready=True))
 
 if __name__=='__main__':unittest.main()
+
+
+
+class QueuedBackupTests(unittest.TestCase):
+    def setUp(self):
+        self.primary = ContactRoute('First', 'notify.mesh_first', True, True, 17)
+        self.backup = ContactRoute('Backup', 'notify.mesh_backup', True, True, 18)
+        self.settings = Settings(
+            enabled=True,
+            enable_emergency_contacts=True,
+            emergency_contact_consent=True,
+            mesh_fallback_enabled=True,
+            mesh_fallback_primary=self.primary.target,
+            mesh_fallback_backup=self.backup.target,
+            emergency_routes=[self.primary.as_dict(), self.backup.as_dict()])
+        self.engine = MeshFallback()
+        self.engine.arm(self.primary.target, self.backup.target, REF,
+                        minutes=2, now=100, listener_ready=True)
+        self.engine.due(now=220, listener_ready=True)
+
+    def test_queued_backup_still_allowed(self):
+        require_backup_send(self.engine, self.settings, self.backup, listener_ready=True)
+
+    def test_revoking_any_global_switch_blocks_worker(self):
+        for name in ('enabled','enable_emergency_contacts','emergency_contact_consent',
+                     'mesh_fallback_enabled'):
+            with self.subTest(name=name):
+                setattr(self.settings,name,False)
+                with self.assertRaises(ValueError):
+                    require_backup_send(self.engine, self.settings, self.backup, listener_ready=True)
+                setattr(self.settings,name,True)
+
+    def test_revoked_contact_and_changed_selection_block_worker(self):
+        self.settings.emergency_routes = [self.primary.as_dict()]
+        with self.assertRaises(ValueError):
+            require_backup_send(self.engine, self.settings, self.backup, listener_ready=True)
+        self.settings.emergency_routes = [self.primary.as_dict(), self.backup.as_dict()]
+        self.settings.mesh_fallback_backup = self.primary.target
+        with self.assertRaises(ValueError):
+            require_backup_send(self.engine, self.settings, self.backup, listener_ready=True)
+
+    def test_listener_loss_blocks_even_after_cant(self):
+        with self.assertRaises(ValueError):
+            require_backup_send(self.engine, self.settings, self.backup, listener_ready=False)
+        cancelled = MeshFallback()
+        cancelled.arm(self.primary.target,self.backup.target,REF,minutes=2,now=100,listener_ready=True)
+        cancelled.reply(REF,self.primary.target,'CANT')
+        self.assertIsNone(cancelled.due(now=101,listener_ready=False))
+        self.assertEqual(cancelled.pending.state,'cancelled')
+
+    def test_operator_can_cancel_queued_send(self):
+        self.engine.cancel('Operator stopped the backup')
+        self.assertEqual(self.engine.pending.state,'cancelled')
+        self.assertIn('cannot be recalled',self.engine.pending.outcome)
+        with self.assertRaises(ValueError):
+            require_backup_send(self.engine,self.settings,self.backup,listener_ready=True)
+        self.engine.sent(accepted=True)
+        self.assertEqual(self.engine.pending.state,'cancelled')
+
+
+class BackupWorkerTests(unittest.TestCase):
+    # These sit beside the actual worker, not just its policy class.
+    def make_queued_send(self):
+        from types import SimpleNamespace
+        from threading import Event
+        from time import monotonic
+        from librebeacon.app import LibreBeaconApp
+
+        first = ContactRoute('First', 'notify.mesh_first', True, True, 17)
+        backup = ContactRoute('Backup', 'notify.mesh_backup', True, True, 18)
+        settings = Settings(enabled=True, enable_emergency_contacts=True,
+                            emergency_contact_consent=True, mesh_fallback_enabled=True,
+                            mesh_fallback_primary=first.target, mesh_fallback_backup=backup.target,
+                            emergency_routes=[first.as_dict(), backup.as_dict()])
+        engine = MeshFallback()
+        engine.arm(first.target, backup.target, REF, minutes=2,
+                   now=monotonic()-150, listener_ready=True)
+
+        class FakeHA:
+            def __init__(self):
+                self.sent = []
+                self.after_lookup = None
+
+            def state(self, target):
+                if self.after_lookup:
+                    self.after_lookup()
+                return {'entity_id': target, 'state': 'unknown',
+                        'attributes': {'node_id': 18, 'user_id': '!00000012'}}
+
+            def send_notification(self, target, message):
+                self.sent.append((target, message))
+
+        client = FakeHA()
+        queued, status = [], []
+        app = SimpleNamespace(mesh_fallback=engine, settings=settings,
+                              mesh_listener_ready=True, mesh_listener_active=True,
+                              mesh_listener_stop=Event(), last_fallback_tick=monotonic(),
+                              client=lambda: client,
+                              status=SimpleNamespace(set=status.append),
+                              start=lambda key, work: queued.append((key, work)))
+        LibreBeaconApp.check_mesh_fallback(app)
+        self.assertEqual(len(queued), 1)
+        self.assertEqual(queued[0][0], 'mesh_fallback_delivery')
+        return app, client, queued[0][1]
+
+    def test_live_backup_worker_sends_one_approved_message(self):
+        _, client, send = self.make_queued_send()
+        target, accepted, error, reference = send()
+        self.assertEqual((target, accepted, error), ('notify.mesh_backup', True, ''))
+        self.assertEqual(len(client.sent), 1)
+        self.assertEqual(client.sent[0][0], target)
+        self.assertTrue(reference.startswith('LB-'))
+
+    def test_consent_revoked_while_ha_lookup_was_pending(self):
+        app, client, send = self.make_queued_send()
+        client.after_lookup = lambda: app.settings.emergency_routes[-1].update(consent=False)
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])
+
+    def test_stop_listening_while_ha_lookup_was_pending(self):
+        app, client, send = self.make_queued_send()
+        def disconnect():
+            app.mesh_listener_ready = False
+            app.mesh_listener_stop.set()
+        client.after_lookup = disconnect
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])
+
+    def test_cancelling_while_ha_lookup_was_pending(self):
+        app, client, send = self.make_queued_send()
+        client.after_lookup = lambda: app.mesh_fallback.cancel('Operator stopped backup')
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])

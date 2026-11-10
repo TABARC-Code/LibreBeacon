@@ -1,3 +1,10 @@
+## 4.15.0 - Backup contact cancellation
+
+- I made the queued Meshtastic backup check current consent, alert switches and recipient selection just before Home Assistant gets a message.
+- I fixed the case where a CANT reply could still start a backup after the listener had gone away.
+- Cancel now covers a queued send. A request already underway may have left the machine; that bit cannot be undone.
+- Added regression checks for cancellation, lost listening and contact changes during a slow node lookup.
+
 ## 4.14.0 - Field-check approval expiry
 
 - I now expire the gateway check, recipient check and TEST ONLY preview after five minutes. A stale approval requires a fresh review.

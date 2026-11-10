@@ -59,7 +59,9 @@ class MeshFallback:
             item.state = 'cant'
 
     def cancel(self, reason: str = 'Operator cancelled the pending backup') -> None:
-        if self.pending is not None and self.pending.state in ('waiting', 'cant'):
+        if self.pending is not None and self.pending.state in ('waiting', 'cant', 'sending'):
+            if self.pending.state == 'sending':
+                reason += ' A request already started cannot be recalled.'
             self.pending.state, self.pending.outcome = 'cancelled', reason
 
     def due(self, *, now: float, listener_ready: bool) -> str | None:
@@ -68,8 +70,9 @@ class MeshFallback:
             return None
         if not isinstance(now, (int, float)) or not isfinite(now):
             return None
-        if item.state == 'waiting' and not listener_ready:
-            self.cancel('Reply listener stopped. No-reply fallback cancelled.')
+        if not listener_ready:
+            # A CANT reply doesn't make a dead listener trustworthy again.
+            self.cancel('Reply listener stopped. Backup cancelled.')
             return None
         if now >= item.expires:
             item.state, item.outcome = 'expired', 'Fallback window expired; no new request.'
@@ -90,3 +93,29 @@ class MeshFallback:
         if p is None:
             return 'No backup pending this session.'
         return p.outcome or f'Waiting for primary radio reply; backup limited to {p.backup}.'
+
+
+
+def require_backup_send(fallback: MeshFallback, settings, route, *, listener_ready: bool) -> None:
+    """Last check before HA gets a radio message.
+
+    A queued worker is not permission to use yesterday's contact list.
+    The person may have switched everything off while the network was slow.
+    """
+    from .contacts import read_routes
+    from .meshtastic import is_mesh_entity
+
+    item = fallback.pending
+    if not listener_ready or item is None or item.state != 'sending':
+        raise ValueError('Backup cancelled or reply listener unavailable')
+    if not settings.enabled or not settings.enable_emergency_contacts or not settings.emergency_contact_consent:
+        raise ValueError('Automatic contact messages are now disabled')
+    if (not settings.mesh_fallback_enabled or
+            settings.mesh_fallback_primary != item.primary or
+            settings.mesh_fallback_backup != item.backup or
+            route.target != item.backup):
+        raise ValueError('Backup contact selection changed')
+    current = read_routes(settings.emergency_routes)
+    if (route not in current or not is_mesh_entity(route.target) or
+            not route.enabled or not route.consent or route.mesh_node_id is None):
+        raise ValueError('Backup contact is no longer approved')

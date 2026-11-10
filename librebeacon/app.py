@@ -482,8 +482,16 @@ class LibreBeaconApp:
             return
         def send_one():
             from .contacts import dispatch_route
+            from .mesh_fallback import require_backup_send
+            def still_approved():
+                # The worker may have waited on HA. Recheck before handing it
+                # a message; a Cancel click isn't merely decoration.
+                require_backup_send(self.mesh_fallback, self.settings, route,
+                    listener_ready=(self.mesh_listener_ready and self.mesh_listener_active
+                                    and not self.mesh_listener_stop.is_set()))
             try:
-                ref = dispatch_route(client, route, emergency_message(), mesh_kind='critical_low')
+                ref = dispatch_route(client, route, emergency_message(),
+                    mesh_kind='critical_low', before_mesh_send=still_approved)
                 return route.target, True, '', ref
             except Exception as exc:
                 return route.target, False, exc.__class__.__name__, ''
