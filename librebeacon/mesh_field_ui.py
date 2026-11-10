@@ -8,7 +8,8 @@ import tkinter as tk
 from uuid import uuid4
 
 from .contacts import read_routes
-from .mesh_field_trial import MeshFieldTrial, send_confirmed_field_test
+from .mesh_field_trial import (MeshFieldTrial, MANUAL_FIELD_CASES, MANUAL_OUTCOMES,
+                               send_confirmed_field_test)
 from .mesh_health import discover_gateways
 from .homeassistant import HomeAssistantError
 from .meshtastic import is_mesh_entity, require_mesh_choice
@@ -101,7 +102,21 @@ class MeshFieldWizard:
         ttk.Label(self.third, text='Only a local redacted report is saved when you choose Save. '
                   'Hardware results remain NOT RUN until actually observed.',
                   wraplength=700).pack(anchor='w', pady=5)
-        self.report_text = tk.Text(self.third, wrap='word', height=15,
+        review = ttk.LabelFrame(self.third, text='Record a witnessed field check', padding=8)
+        review.pack(fill='x', pady=5)
+        ttk.Label(review, text='Only record something you actually tried. PASS means you observed it, '
+                  'not that a medical alarm is dependable.', wraplength=660).pack(anchor='w')
+        self.case_label = tk.StringVar(value='')
+        self.case_options = {f'{code} · {label}': code for code, label in MANUAL_FIELD_CASES}
+        self.case_picker = ttk.Combobox(review, textvariable=self.case_label,
+                                        values=list(self.case_options), state='readonly', width=60)
+        self.case_picker.pack(anchor='w', pady=3)
+        self.outcome = tk.StringVar(value='NOT RUN')
+        ttk.Combobox(review, textvariable=self.outcome, values=MANUAL_OUTCOMES,
+                     state='readonly', width=15).pack(anchor='w', pady=3)
+        ttk.Button(review, text='Record Operator-Reported Result',
+                   command=self.record_case).pack(anchor='w', pady=4)
+        self.report_text = tk.Text(self.third, wrap='word', height=9,
                                    font=('Consolas', max(10, self.app.accessible_size-2)))
         self.report_text.pack(fill='both', expand=True)
         bar = ttk.Frame(self.third)
@@ -279,6 +294,28 @@ class MeshFieldWizard:
         elif action == 'send':
             self.model.sent(True)
             self.status.set('Home Assistant accepted TEST ONLY. Ask the receiver whether it arrived.')
+        self.refresh()
+
+    def record_case(self):
+        if self.busy:
+            self.status.set('Finish the current check before recording another result.')
+            return
+        code = self.case_options.get(self.case_label.get())
+        if code is None:
+            messagebox.showinfo('Field check', 'Choose a numbered field case first.')
+            return
+        outcome = self.outcome.get()
+        if outcome != 'NOT RUN' and not messagebox.askyesno(
+                'Record observed result',
+                f'Case {code}: {outcome}\n\nDid you perform this check and observe this result? '
+                'It will be recorded as OPERATOR REPORTED, not independently verified.'):
+            return
+        try:
+            self.model.record_observation(code, outcome)
+        except ValueError as exc:
+            messagebox.showerror('Field check', str(exc))
+            return
+        self.status.set(f'Case {code}: {self.model.cases[code]}. Only saved locally if you choose Save.')
         self.refresh()
 
     def save_report(self):

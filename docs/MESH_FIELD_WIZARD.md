@@ -23,6 +23,14 @@ The wizard is part of LibreBeacon 4.11.0. It hasn't been tried with two physical
 - **USER REPORTED RECEIPT:** The operator says the intended contact confirmed the message through another route. No inference about medical assistance.
 - **NOT RUN:** No field observation recorded. The wizard deliberately leaves other checklist cases alone.
 
+## Record the other field checks
+
+On **3 · Report**, pick one of the remaining numbered field cases and choose **PASS**, **FAIL** or **NOT RUN**. Press **Record Operator-Reported Result** and confirm only if you actually witnessed the check. LibreBeacon labels these **OPERATOR REPORTED**; they're not independent evidence and they don't change the alert engine.
+
+Cases **02–04** remain controlled by the guided identity check and actual test request, so they can't be overwritten with a tick. Cases **05–06** are cleared when you change the recipient, repeat a gateway check or prepare a new message. Otherwise an old reply could make a fresh trial look rather more convincing than it is.
+
+The report contains result categories only. No free-form notes, node IDs, recipients or message contents are exported. Keep detailed observations separately and privately if needed.
+
 ## Local report and privacy
 
 The report includes the application version, session start time, gateway/recipient result categories and the numbered cases from [the field checklist](MESH_FIELD_TRIAL.md). It leaves out names, entity IDs, node numbers, message bodies, references, passwords and glucose readings. The file is written only when you select a location.

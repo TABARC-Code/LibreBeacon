@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.11.0** · experimental community prototype · MIT licence
+Current version: **4.12.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.11.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.12.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -101,6 +101,10 @@ I've added a three-step **TEST ONLY** field-check window to Start Here and Emerg
 The report stays in memory until someone chooses **Save Redacted Report**. It records request and operator-reported receipt as different things, without including the person's name, node ID, message text or glucose history. Rechecking the recipient clears old receipt status. This is still untested with real radios and Windows screen readers.
 
 [Field-check guide](docs/MESH_FIELD_WIZARD.md) · [Hands-on checklist](docs/MESH_FIELD_TRIAL.md)
+
+## Field observations (v4.12.0)
+
+On the guided Meshtastic field check's Report page I can now record witnessed outcomes for cases 01 and 05–13. Each result says **OPERATOR REPORTED**, not independently verified. Cases 02–04 stay tied to the guided identity and test-send checks; old reply observations are cleared before a new trial. The redacted report stores controlled outcome labels rather than personal notes. See [field-check instructions](docs/MESH_FIELD_WIZARD.md).
 
 ## What does and doesn't work yet
 

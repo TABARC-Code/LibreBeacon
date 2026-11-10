@@ -32,6 +32,8 @@ The optional [guided Windows field check](MESH_FIELD_WIZARD.md) can help with th
 | 12. Accessibility | Test keyboard alone, NVDA speech, high DPI, magnification, steady notices and separate sound | Clear focus, readable status and no undisclosed motion | **Not run on hardware** |
 | 13. Physical radio | Repeat ordinary tests at intended indoor/outdoor positions and during low battery | Record real delivery, failure and latency without claims of guaranteed coverage | **Not run on hardware** |
 
+For checks 01 and 05–13, the field-test wizard now accepts **OPERATOR REPORTED PASS/FAIL** results. These are personal observations, not verified service guarantees. Cases 02–04 are recorded by the guided test itself.
+
 If a case fails, mark it **FAILED**, describe only the observed behaviour, and record the version. Retest before closing it. No green ticks until a person or machine has actually checked it.
 
 ## Evidence to record without publishing private data

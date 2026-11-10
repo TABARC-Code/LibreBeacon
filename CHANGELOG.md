@@ -1,3 +1,10 @@
+## 4.12.0 - Field report observations
+
+- I added manual PASS/FAIL/NOT RUN recording for the remaining numbered field checks, clearly marked as operator-reported.
+- I kept identity and transmission cases under the guided test, rather than allowing a tick box to claim delivery.
+- Changing the recipient or preparing another test now clears earlier reply-case observations.
+- The local report still excludes free-text notes, contact names and radio identifiers.
+
 ## 4.11.0 - Guided Meshtastic field check
 
 - I added a three-page field-check window for gateway observation, recipient verification, a one-off TEST ONLY message and a private local report.
