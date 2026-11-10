@@ -45,3 +45,9 @@ This wizard doesn't create a real low glucose event, enable emergency contacts, 
 - Consider binding gateways to each contact more precisely once the integration exposes reliable gateway-scoped identity information.
 
 Keep official Libre alarms active. The whole feature is supplementary and must not be relied upon for treatment or emergency assistance.
+
+## A gateway changing mid-check
+
+I now keep the Home Assistant gateway entity ID used during the check. Before a real test send, the app asks Home Assistant again and refuses to switch to a different gateway silently. This is an HA entity check, **not** proof of radio ownership or signal coverage; the device registry can still be misconfigured.
+
+If contact settings become invalid before the test starts, the prepared message is discarded and a new preview is needed. No retry happens on its own. If a send request fails after it starts, the app leaves delivery **unknown**, since a timeout doesn't prove the radio stayed silent.

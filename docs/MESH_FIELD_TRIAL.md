@@ -36,6 +36,10 @@ For checks 01 and 05–13, the field-test wizard now accepts **OPERATOR REPORTED
 
 If a case fails, mark it **FAILED**, describe only the observed behaviour, and record the version. Retest before closing it. No green ticks until a person or machine has actually checked it.
 
+### Gateway replacement check
+
+I also want a deliberate no-send check for gateways that disappear or are replaced after the initial status check. With the wizard open, change which gateway entity Home Assistant exposes (in a controlled test setup) and try the preview/send checks. The app should refuse a changed gateway instead of selecting whichever one happens to report connected. Mark the result **NOT RUN** until tried with real hardware. Do not cause an actual glucose alert to test this.
+
 ## Evidence to record without publishing private data
 
 | Field | Example of acceptable wording |

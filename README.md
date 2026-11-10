@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.12.0** · experimental community prototype · MIT licence
+Current version: **4.13.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.12.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.13.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -85,6 +85,12 @@ The optional radio contact route now uses **short, labelled messages** rather th
 - Contact status means **Home Assistant accepted the request**, never that the radio or recipient received it. A reply must still be confirmed independently.
 
 [Plain-English message guide](docs/MESH_MESSAGING.md). The radio remains dependent on Home Assistant and a configured gateway. No message-delivery guarantees are made.
+
+## Field-check safeguards (v4.13.0)
+
+I now keep the specific Home Assistant gateway entity used during the guided Meshtastic check. Before sending a deliberately confirmed \`TEST ONLY\` message, LibreBeacon checks that the same gateway still exists and is reported connected. A different gateway won't be accepted just because its status also says connected.
+
+A configuration error before transmission clears the prepared test and requires a fresh check and preview. A failed request after starting is labelled **delivery unknown**, since a timeout doesn't establish what happened on the radio. Nothing here proves actual receiver coverage; see the [field-check instructions](docs/MESH_FIELD_WIZARD.md).
 
 ## Safe mesh backup rehearsal (v4.10.0)
 
