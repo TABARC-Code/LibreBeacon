@@ -24,6 +24,7 @@ from .mesh_replies import MeshReplyTracker, node_number
 from .mesh_stream import listen_for_replies
 from .mesh_fallback import MeshFallback
 from .mesh_simulation import SCENARIOS, simulate_fallback
+from .mesh_field_ui import MeshFieldWizard
 from . import __version__
 
 HELP_URL = 'https://support.microsoft.com/en-gb/windows/apps/phonelink/setting-up-notifications-in-the-phone-link'
@@ -170,6 +171,8 @@ class LibreBeaconApp:
         ttk.Button(p, text='Check Meshtastic Gateway Status', command=self.check_mesh_health).pack(
             fill='x', anchor='w', pady=3)
         ttk.Button(p, text='Practise Mesh Backup (Simulation Only)', command=self.open_mesh_simulation).pack(
+            fill='x', anchor='w', pady=3)
+        ttk.Button(p, text='Guided Meshtastic Field Check (TEST ONLY)', command=self.open_mesh_field_wizard).pack(
             fill='x', anchor='w', pady=3)
         ttk.Button(p, text='Check Saved Setup', command=self.refresh_setup).pack(anchor='w', pady=10)
         self.setup_report = tk.StringVar()
@@ -324,6 +327,7 @@ class LibreBeaconApp:
         ttk.Button(box, text='Set Up Meshtastic Replies', command=self.open_mesh_reply_setup).pack(anchor='w', pady=4)
         ttk.Button(box, text='Set Up Backup Contact', command=self.open_mesh_fallback_setup).pack(anchor='w', pady=4)
         ttk.Button(box, text='Run Safe Mesh Simulation', command=self.open_mesh_simulation).pack(anchor='w', pady=4)
+        ttk.Button(box, text='Guided Mesh Field Check', command=self.open_mesh_field_wizard).pack(anchor='w', pady=4)
 
         ttk.Button(box, text='Check Contact Delivery Status', command=self.refresh_routes).pack(anchor='w', pady=5)
         self.delivery_report = tk.StringVar()
@@ -385,6 +389,12 @@ class LibreBeaconApp:
             ttk.Button(row, text='Cancel Pending Backup', command=self.cancel_mesh_fallback).pack(side='left', padx=3)
             ttk.Button(row, text='Close', command=self.fallback_window.destroy).pack(side='left', padx=3)
         self.fallback_window.lift()
+
+    def open_mesh_field_wizard(self):
+        if hasattr(self, 'field_wizard') and self.field_wizard.root.winfo_exists():
+            self.field_wizard.root.lift()
+            return
+        self.field_wizard = MeshFieldWizard(self)
 
     def open_mesh_simulation(self):
         """A read-only rehearsal. No contacts, sensors or client involved.
@@ -938,6 +948,10 @@ class LibreBeaconApp:
             while True:
                 key,ok,result=self.queue.get_nowait()
                 if key=='poll':self.busy_poll=False
+                if key == 'mesh_field_trial':
+                    if ok and hasattr(self, 'field_wizard'):
+                        self.field_wizard.on_result(result)
+                    continue
                 if not ok:
                     self.status.set(f'{key}: {result}')
                     if key == 'mesh_health' and hasattr(self, 'mesh_status_text'):
