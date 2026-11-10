@@ -1,3 +1,10 @@
+## 4.14.0 - Field-check approval expiry
+
+- I now expire the gateway check, recipient check and TEST ONLY preview after five minutes. A stale approval requires a fresh review.
+- I check permission again after Home Assistant's gateway and recipient lookups.
+- Closing the field-test window revokes pending send permission. Messages already accepted upstream cannot be recalled.
+- I added regression coverage for expired checks, clock changes and cancellation during network lookups.
+
 ## 4.13.0 - Mesh field-check safeguards
 
 - I pinned the checked Home Assistant gateway entity to the test session. If that gateway disappears or another one takes its place, the test stops instead of quietly switching routes.

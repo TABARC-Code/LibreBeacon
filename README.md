@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.13.0** · experimental community prototype · MIT licence
+Current version: **4.14.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.13.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.14.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -85,6 +85,12 @@ The optional radio contact route now uses **short, labelled messages** rather th
 - Contact status means **Home Assistant accepted the request**, never that the radio or recipient received it. A reply must still be confirmed independently.
 
 [Plain-English message guide](docs/MESH_MESSAGING.md). The radio remains dependent on Home Assistant and a configured gateway. No message-delivery guarantees are made.
+
+## Field-check approval expiry (v4.14.0)
+
+I now limit gateway, recipient and TEST ONLY preview checks to five minutes. If Windows sleeps, the clock changes or somebody leaves the wizard open, I require a fresh check and preview before a radio test. The code checks again immediately before requesting transmission.
+
+Closing the wizard cancels a pending send. Once Home Assistant has already accepted a request, I can't recall the radio message. These are safeguards around a **test**, not evidence that the intended person received anything. See the [field-check guide](docs/MESH_FIELD_WIZARD.md).
 
 ## Field-check safeguards (v4.13.0)
 

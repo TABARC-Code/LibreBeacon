@@ -51,3 +51,11 @@ Keep official Libre alarms active. The whole feature is supplementary and must n
 I now keep the Home Assistant gateway entity ID used during the check. Before a real test send, the app asks Home Assistant again and refuses to switch to a different gateway silently. This is an HA entity check, **not** proof of radio ownership or signal coverage; the device registry can still be misconfigured.
 
 If contact settings become invalid before the test starts, the prepared message is discarded and a new preview is needed. No retry happens on its own. If a send request fails after it starts, the app leaves delivery **unknown**, since a timeout doesn't prove the radio stayed silent.
+
+## Approval expiry
+
+I keep the gateway check, recipient check and preview valid for at most five minutes. If I leave the window open or Windows sleeps, I need to check again and prepare a fresh TEST ONLY message.
+
+Closing the window revokes pending permission, including while Home Assistant is still answering a gateway or recipient query. The sender checks once more immediately before requesting the notification. A request that's already been accepted cannot be withdrawn, so I still need the recipient to confirm what actually arrived.
+
+This is a guard against old test requests, not a radio coverage guarantee.
