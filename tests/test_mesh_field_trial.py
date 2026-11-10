@@ -185,6 +185,46 @@ class FieldTrialTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MeshFieldTrial().report('4.11.0\nContact: abc')
 
+    def test_operator_can_record_only_manual_cases(self):
+        from librebeacon.mesh_field_trial import MANUAL_FIELD_CASES
+        t = MeshFieldTrial()
+        self.assertEqual(len(MANUAL_FIELD_CASES), 10)
+        for code in ('02', '03', '04', '00', '14'):
+            with self.subTest(code=code), self.assertRaises(ValueError):
+                t.record_observation(code, 'PASS')
+        for outcome in ('pass', 'SUCCESS', '', 'PASS\nNode: A', None, True):
+            with self.subTest(outcome=outcome), self.assertRaises(ValueError):
+                t.record_observation('12', outcome)
+        t.record_observation('12', 'FAIL')
+        self.assertEqual(t.cases['12'], 'OPERATOR REPORTED FAIL')
+        self.assertIn('12. Assistive technology and display: OPERATOR REPORTED FAIL', t.report('4.12.0'))
+        t.record_observation('12', 'NOT RUN')
+        self.assertEqual(t.cases['12'], 'NOT RUN')
+
+    def test_new_test_does_not_reuse_old_radio_reply_claims(self):
+        t = self.ready()
+        t.record_observation('05', 'PASS')
+        t.record_observation('06', 'FAIL')
+        t.preview()
+        self.assertEqual(t.cases['05'], 'NOT RUN')
+        self.assertEqual(t.cases['06'], 'NOT RUN')
+        t.record_observation('05', 'PASS')
+        t.gateway_checked(['HA REPORTS CONNECTED'])
+        self.assertEqual(t.cases['05'], 'NOT RUN')
+        t.recipient_checked_result(True)
+        t.confirm_owner()
+        t.record_observation('05', 'FAIL')
+        t.select(OTHER)
+        self.assertEqual(t.cases['05'], 'NOT RUN')
+
+    def test_report_never_includes_custom_field_notes(self):
+        t = self.ready()
+        t.record_observation('07', 'PASS')
+        report = t.report('4.12.0')
+        self.assertIn('OPERATOR REPORTED PASS', report)
+        self.assertIn('not independent validation', report)
+        self.assertNotIn(ROUTE.label, report)
+        self.assertNotIn(ROUTE.target, report)
 
 if __name__ == '__main__':
     unittest.main()

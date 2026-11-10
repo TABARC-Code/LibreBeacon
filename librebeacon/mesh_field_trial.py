@@ -31,6 +31,12 @@ FIELD_CASES = (
 )
 
 
+# Cases 02-04 are controlled by the test request itself, not a tick box.
+MANUAL_FIELD_CASES = tuple((code, label) for code, label in FIELD_CASES
+                           if code not in ('02', '03', '04'))
+MANUAL_OUTCOMES = ('PASS', 'FAIL', 'NOT RUN')
+
+
 @dataclass
 class MeshFieldTrial:
     """One session, one test request at a time. No persistence until Save."""
@@ -61,7 +67,7 @@ class MeshFieldTrial:
         self.request_result = 'NOT SENT'
         self.receipt = 'NOT CONFIRMED'
         # A new receiver means a new test. Never borrow the old results.
-        for code in ('02', '03', '04'):
+        for code in ('02', '03', '04', '05', '06'):
             self.cases[code] = 'NOT RUN'
 
     def gateway_checked(self, states: list[str]) -> None:
@@ -81,6 +87,8 @@ class MeshFieldTrial:
         self.cases['02'] = 'NOT RUN'
         self.cases['03'] = 'NOT RUN'
         self.cases['04'] = 'NOT RUN'
+        self.cases['05'] = 'NOT RUN'
+        self.cases['06'] = 'NOT RUN'
 
     def recipient_checked_result(self, matches: bool) -> None:
         self.recipient_checked = bool(matches and self.gateway_ready and self.route is not None)
@@ -93,6 +101,8 @@ class MeshFieldTrial:
         self.receipt = 'NOT CONFIRMED'
         self.cases['03'] = 'NOT RUN'
         self.cases['04'] = 'NOT RUN'
+        self.cases['05'] = 'NOT RUN'
+        self.cases['06'] = 'NOT RUN'
 
     def confirm_owner(self) -> None:
         if not self.recipient_checked or self.route is None:
@@ -110,6 +120,8 @@ class MeshFieldTrial:
         self.receipt = 'NOT CONFIRMED'
         self.cases['03'] = 'NOT RUN'
         self.cases['04'] = 'NOT RUN'
+        self.cases['05'] = 'NOT RUN'
+        self.cases['06'] = 'NOT RUN'
         return self.prepared
 
     def approve(self) -> None:
@@ -140,6 +152,15 @@ class MeshFieldTrial:
         self.receipt = 'OPERATOR-REPORTED RECEIPT; NOT INDEPENDENTLY VERIFIED'
         self.cases['04'] = 'USER REPORTED RECEIPT'
 
+    def record_observation(self, code: str, outcome: str) -> None:
+        """Manual field notes are labelled as claims by the operator, not proof."""
+        if type(code) is not str or code not in {item[0] for item in MANUAL_FIELD_CASES}:
+            raise ValueError('This case is recorded by the guided check, not manually')
+        if outcome not in MANUAL_OUTCOMES or type(outcome) is not str:
+            raise ValueError('Choose PASS, FAIL or NOT RUN')
+        # No free-form text in a redacted report. It only takes one pasted token.
+        self.cases[code] = 'NOT RUN' if outcome == 'NOT RUN' else f'OPERATOR REPORTED {outcome}'
+
     def report(self, version: str) -> str:
         # Keep this deliberately dull. Names, IDs, exact radio texts and
         # glucose numbers belong nowhere near an exported test report.
@@ -152,7 +173,8 @@ class MeshFieldTrial:
                  f'Recipient node metadata: {self.recipient_observation}',
                  f'Test request: {self.request_result}',
                  f'Physical receipt: {self.receipt}', '',
-                 'Field checks (NOT RUN unless recorded below):']
+                 'Field checks (NOT RUN unless recorded below):',
+                 'OPERATOR REPORTED outcomes are not independent validation.']
         for code, label in FIELD_CASES:
             lines.append(f'{code}. {label}: {self.cases[code]}')
         lines.extend(['', 'No recipient names, radio IDs, message bodies, tokens or glucose history are included.',
