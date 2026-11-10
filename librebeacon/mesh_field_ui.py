@@ -185,7 +185,7 @@ class MeshFieldWizard:
         # Reset before the network read so a failed check doesn't leave a green-looking state.
         def run():
             records = discover_gateways(client.states(), now=datetime.now(timezone.utc))
-            return [item.status for item in records]
+            return records
         self._submit('gateway', run)
 
     def check_recipient(self):
@@ -281,7 +281,7 @@ class MeshFieldWizard:
             elif action == 'recipient':
                 self.model.recipient_checked_result(False)
             elif action == 'send':
-                self.model.sent(False)
+                self.model.failed_send()
             self.status.set('Check failed (' + payload + '). No delivery claim made.')
             self.refresh()
             return

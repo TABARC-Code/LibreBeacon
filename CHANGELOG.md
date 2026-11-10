@@ -1,3 +1,10 @@
+## 4.13.0 - Mesh field-check safeguards
+
+- I pinned the checked Home Assistant gateway entity to the test session. If that gateway disappears or another one takes its place, the test stops instead of quietly switching routes.
+- I stopped untyped gateway status strings from being treated as proof of a usable gateway.
+- I fixed the send-failure path so a bad contact check clears permission without crashing the wizard. A failed request still means delivery is unknown.
+- I added regression cases for gateway changes and a check failing before the send starts.
+
 ## 4.12.0 - Field report observations
 
 - I added manual PASS/FAIL/NOT RUN recording for the remaining numbered field checks, clearly marked as operator-reported.

@@ -3,10 +3,13 @@ import unittest
 from datetime import datetime, timezone
 from librebeacon.contacts import ContactRoute
 from librebeacon.mesh_field_trial import FIELD_CASES, MeshFieldTrial, send_confirmed_field_test
+from librebeacon.mesh_health import GatewayStatus
 
 
 ROUTE = ContactRoute('Home receiver', 'notify.mesh_home_receiver', True, True, 0xAABB22)
 OTHER = ContactRoute('Second receiver', 'notify.mesh_second_receiver', True, True, 0xAA0066)
+GATEWAY = GatewayStatus('meshtastic.gateway_local', 'Local gateway', 'HA REPORTS CONNECTED',
+                        'Home Assistant observation', datetime.now(timezone.utc), True)
 
 
 class FakeClient:
@@ -33,7 +36,7 @@ class FieldTrialTests(unittest.TestCase):
     def ready(self, route=ROUTE):
         model = MeshFieldTrial()
         model.select(route)
-        model.gateway_checked(['HA REPORTS CONNECTED'])
+        model.gateway_checked([GATEWAY])
         model.recipient_checked_result(True)
         model.confirm_owner()
         return model
@@ -59,19 +62,21 @@ class FieldTrialTests(unittest.TestCase):
 
     def test_gateway_must_be_one_explicitly_connected_record(self):
         t = MeshFieldTrial(); t.select(ROUTE)
-        for states in [[], ['UNVERIFIED'], ['DISCONNECTED'], ['HA REPORTS CONNECTED']*2,
-                       ['HA REPORTS CONNECTED','DISCONNECTED']]:
+        for states in [[], ['UNVERIFIED'], ['DISCONNECTED'], [GATEWAY, GATEWAY],
+                       [GATEWAY, 'DISCONNECTED'],
+                       [GatewayStatus('meshtastic.gateway_local', 'Local', 'HA REPORTS CONNECTED',
+                                      'No type', datetime.now(timezone.utc), False)]]:
             t.gateway_checked(states)
             self.assertFalse(t.gateway_ready)
             with self.assertRaises(ValueError): t.preview()
-        t.gateway_checked(['HA REPORTS CONNECTED'])
+        t.gateway_checked([GATEWAY])
         self.assertTrue(t.gateway_ready)
         with self.assertRaises(ValueError): t.preview()
 
     def test_owner_must_be_confirmed_before_preview(self):
         model = MeshFieldTrial()
         model.select(ROUTE)
-        model.gateway_checked(['HA REPORTS CONNECTED'])
+        model.gateway_checked([GATEWAY])
         model.recipient_checked_result(True)
         with self.assertRaises(ValueError):
             model.preview()
@@ -118,7 +123,7 @@ class FieldTrialTests(unittest.TestCase):
         with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
         self.assertNotIn('notify', client.calls)
         t.sent(False)
-        self.assertEqual(t.request_result, 'REQUEST FAILED')
+        self.assertEqual(t.request_result, 'REQUEST FAILED; DELIVERY UNKNOWN')
         with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
 
     def test_replaced_node_blocks_send(self):
@@ -135,7 +140,7 @@ class FieldTrialTests(unittest.TestCase):
         self.assertIsNone(t.prepared)
         self.assertFalse(t.authorised)
         self.assertEqual(t.cases['02'], 'NOT RUN')
-        t.gateway_checked(['HA REPORTS CONNECTED'])
+        t.gateway_checked([GATEWAY])
         t.recipient_checked_result(True)
         t.confirm_owner()
         t.preview(); t.approve()
@@ -154,7 +159,7 @@ class FieldTrialTests(unittest.TestCase):
     def test_rechecking_gateway_clears_previous_request_and_receipt(self):
         t = self.ready(); t.preview(); t.approve(); t.consume_send(); t.sent(True)
         t.record_receipt()
-        t.gateway_checked(['HA REPORTS CONNECTED'])
+        t.gateway_checked([GATEWAY])
         self.assertEqual(t.request_result, 'NOT SENT')
         self.assertEqual(t.receipt, 'NOT CONFIRMED')
         self.assertEqual(t.cases['03'], 'NOT RUN')
@@ -209,7 +214,7 @@ class FieldTrialTests(unittest.TestCase):
         self.assertEqual(t.cases['05'], 'NOT RUN')
         self.assertEqual(t.cases['06'], 'NOT RUN')
         t.record_observation('05', 'PASS')
-        t.gateway_checked(['HA REPORTS CONNECTED'])
+        t.gateway_checked([GATEWAY])
         self.assertEqual(t.cases['05'], 'NOT RUN')
         t.recipient_checked_result(True)
         t.confirm_owner()
@@ -225,6 +230,78 @@ class FieldTrialTests(unittest.TestCase):
         self.assertIn('not independent validation', report)
         self.assertNotIn(ROUTE.label, report)
         self.assertNotIn(ROUTE.target, report)
+
+    def test_gateway_identity_is_pinned_before_sending(self):
+        t = self.ready()
+        self.assertEqual(t.gateway_entity_id, GATEWAY.entity_id)
+        t.preview(); t.approve()
+        class SwitchedGateway(FakeClient):
+            def states(self):
+                records = super().states()
+                records[0]['entity_id'] = 'meshtastic.gateway_other'
+                return records
+        client = SwitchedGateway()
+        with self.assertRaisesRegex(ValueError, 'gateway changed'):
+            send_confirmed_field_test(client, t, [ROUTE])
+        self.assertFalse(any(isinstance(c, tuple) for c in client.calls))
+        t.failed_send()
+        self.assertEqual(t.request_result, 'REQUEST FAILED; DELIVERY UNKNOWN')
+
+    def test_untyped_or_ambiguous_gateway_cannot_enable_send(self):
+        t = MeshFieldTrial()
+        t.select(ROUTE)
+        t.gateway_checked(['HA REPORTS CONNECTED'])
+        self.assertFalse(t.gateway_ready)
+        self.assertIsNone(t.gateway_entity_id)
+        t.gateway_checked([GATEWAY, GATEWAY])
+        self.assertFalse(t.gateway_ready)
+        t.gateway_checked([GatewayStatus('meshtastic.gateway_local', 'Local', 'HA REPORTS CONNECTED',
+                                         'No type', datetime.now(timezone.utc), False)])
+        self.assertFalse(t.gateway_ready)
+
+    def test_failure_before_permission_consumed_clears_approval(self):
+        t = self.ready(); t.preview(); t.approve()
+        t.failed_send()
+        self.assertFalse(t.authorised)
+        self.assertIsNone(t.prepared)
+        self.assertEqual(t.request_result, 'BLOCKED BEFORE SEND')
+        self.assertEqual(t.cases['03'], 'BLOCKED BEFORE SEND')
+        with self.assertRaises(ValueError): t.consume_send()
+        with self.assertRaises(ValueError): t.failed_send()
+
+    def test_rechecking_gateway_clears_its_pinned_identity(self):
+        t = self.ready()
+        t.preview(); t.approve()
+        t.gateway_checked([])
+        self.assertIsNone(t.gateway_entity_id)
+        self.assertFalse(t.authorised)
+        self.assertIsNone(t.prepared)
+
+    def test_live_gateway_still_sends_to_the_pinned_receiver(self):
+        t = self.ready()
+        t.preview(); t.approve()
+        c = FakeClient()
+        ref = send_confirmed_field_test(c, t, [ROUTE])
+        self.assertTrue(ref.startswith('LB-'))
+        self.assertEqual(len([call for call in c.calls if isinstance(call, tuple)]), 1)
+
+    def test_ui_callback_handles_failure_before_consuming_send(self):
+        from types import SimpleNamespace
+        from librebeacon.mesh_field_ui import MeshFieldWizard
+
+        t = self.ready(); t.preview(); t.approve()
+        output = []
+        stub = SimpleNamespace(
+            model=t, busy=True, session_key='one',
+            root=SimpleNamespace(winfo_exists=lambda: True),
+            status=SimpleNamespace(set=output.append),
+            refresh=lambda: None,
+        )
+        MeshFieldWizard.on_result(stub, ('one', 'send', False, 'ValueError'))
+        self.assertFalse(stub.busy)
+        self.assertEqual(t.request_result, 'BLOCKED BEFORE SEND')
+        self.assertFalse(t.authorised)
+        self.assertTrue(output)
 
 if __name__ == '__main__':
     unittest.main()

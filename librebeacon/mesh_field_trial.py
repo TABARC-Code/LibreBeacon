@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from .contacts import ContactRoute
 from .meshtastic import is_mesh_entity
 from .mesh_messages import MeshText, build_mesh_message
-from .mesh_health import discover_gateways
+from .mesh_health import discover_gateways, GatewayStatus
 from .contacts import dispatch_route
 
 FIELD_CASES = (
@@ -44,6 +44,7 @@ class MeshFieldTrial:
     route: ContactRoute | None = None
     gateway_observation: str = 'NOT CHECKED'
     gateway_ready: bool = False
+    gateway_entity_id: str | None = None
     recipient_observation: str = 'NOT CHECKED'
     recipient_checked: bool = False
     owner_confirmed: bool = False
@@ -70,10 +71,15 @@ class MeshFieldTrial:
         for code in ('02', '03', '04', '05', '06'):
             self.cases[code] = 'NOT RUN'
 
-    def gateway_checked(self, states: list[str]) -> None:
-        # These are statuses from the read-only HA gateway classifier.
-        connected = sum(state == 'HA REPORTS CONNECTED' for state in states)
-        self.gateway_ready = len(states) == 1 and connected == 1
+    def gateway_checked(self, records: list[GatewayStatus]) -> None:
+        # Pin the actual HA entity, not a lonely word saying "connected".
+        # Two gateways can both report healthy. Which one did we check?
+        gateway = records[0] if (isinstance(records, list) and len(records) == 1
+                                and isinstance(records[0], GatewayStatus)) else None
+        self.gateway_ready = bool(gateway and gateway.verified_type
+                                  and gateway.status == 'HA REPORTS CONNECTED'
+                                  and gateway.entity_id.startswith('meshtastic.'))
+        self.gateway_entity_id = gateway.entity_id if self.gateway_ready else None
         self.gateway_observation = ('HA REPORTS CONNECTED' if self.gateway_ready else
                                     'GATEWAY NOT VERIFIED')
         self.recipient_checked = False
@@ -143,8 +149,24 @@ class MeshFieldTrial:
     def sent(self, accepted: bool) -> None:
         if self.request_result != 'IN PROGRESS':
             raise ValueError('There is no pending test request')
-        self.request_result = 'ACCEPTED BY HA; DELIVERY UNKNOWN' if accepted else 'REQUEST FAILED'
-        self.cases['03'] = 'HA REQUEST ACCEPTED ONLY' if accepted else 'REQUEST FAILED'
+        self.request_result = 'ACCEPTED BY HA; DELIVERY UNKNOWN' if accepted else 'REQUEST FAILED; DELIVERY UNKNOWN'
+        self.cases['03'] = 'HA REQUEST ACCEPTED ONLY' if accepted else 'REQUEST FAILED; DELIVERY UNKNOWN'
+
+    def failed_send(self) -> None:
+        """A validation error can happen before the worker consumes permission.
+
+        Clear the preview either way. Leaving the approval armed after a bad
+        contact-file read would make the next click a rather nasty surprise.
+        """
+        if self.request_result == 'IN PROGRESS':
+            self.sent(False)
+        elif self.request_result == 'NOT SENT':
+            self.authorised = False
+            self.prepared = None
+            self.request_result = 'BLOCKED BEFORE SEND'
+            self.cases['03'] = 'BLOCKED BEFORE SEND'
+        else:
+            raise ValueError('There is no pending send to fail')
 
     def record_receipt(self) -> None:
         if self.request_result != 'ACCEPTED BY HA; DELIVERY UNKNOWN':
@@ -193,7 +215,9 @@ def send_confirmed_field_test(client, trial: MeshFieldTrial, approved_routes: li
     if route not in approved_routes:
         raise ValueError('Recipient authorisation changed; recheck before sending')
     current = discover_gateways(client.states(), now=datetime.now(timezone.utc))
-    if len(current) != 1 or current[0].status != 'HA REPORTS CONNECTED':
-        raise ValueError('Meshtastic gateway is no longer verified')
+    if (len(current) != 1 or not current[0].verified_type
+            or current[0].status != 'HA REPORTS CONNECTED'
+            or current[0].entity_id != trial.gateway_entity_id):
+        raise ValueError('Meshtastic gateway changed or is no longer verified')
     return dispatch_route(client, route, prepared.body,
                           mesh_kind='test', mesh_text=prepared)
