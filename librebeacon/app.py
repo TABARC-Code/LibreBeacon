@@ -462,8 +462,10 @@ class LibreBeaconApp:
             return
         # The listener must have remained connected for a no-reply timeout.
         # A radio that never answered is not evidence that a person needs help.
-        backup = self.mesh_fallback.due(now=now,
-                                        listener_ready=self.mesh_listener_ready)
+        backup = self.mesh_fallback.due(
+            now=now,
+            listener_ready=(self.mesh_listener_ready and self.mesh_listener_active
+                            and not self.mesh_listener_stop.is_set()))
         if hasattr(self, 'fallback_status_text'):
             self.fallback_status_text.set(self.mesh_fallback.describe())
         if not backup:
@@ -629,15 +631,21 @@ class LibreBeaconApp:
             client = self.client()
         except (ValueError, HomeAssistantError) as exc:
             messagebox.showerror('Reply listener', str(exc)); return
-        self.mesh_listener_stop = Event()
+        stop = Event()
+        self.mesh_listener_stop = stop
         self.mesh_listener_active = True
         self.mesh_listener_ready = False
         self.mesh_reply_state.set('Connecting to Home Assistant for replies…')
         def background():
-            listen_for_replies(client.base_url, client.token, self.mesh_listener_stop,
-                               lambda event: self.queue.put(('mesh_reply_event', True, event)),
-                               lambda status: self.queue.put(('mesh_reply_status', True, status)))
-            self.queue.put(('mesh_reply_stopped', True, None))
+            # Keep this worker tied to its own stop event, even if another
+            # connection starts before the old socket has finished closing.
+            try:
+                listen_for_replies(client.base_url, client.token, stop,
+                    lambda event: self.queue.put(('mesh_reply_event', True, (stop, event))),
+                    lambda status: self.queue.put(('mesh_reply_status', True, (stop, status))))
+            finally:
+                stop.set()
+                self.queue.put(('mesh_reply_stopped', True, (stop, None)))
         Thread(target=background, daemon=True).start()
 
     def stop_mesh_reply_listener(self):
@@ -956,6 +964,18 @@ class LibreBeaconApp:
             while True:
                 key,ok,result=self.queue.get_nowait()
                 if key=='poll':self.busy_poll=False
+                if key in ('mesh_reply_status', 'mesh_reply_stopped', 'mesh_reply_event'):
+                    # Queue events can outlive the socket that produced them.
+                    # Ignore callbacks from an older listener, including its
+                    # final "stopped" message after a newer session starts.
+                    if not isinstance(result, tuple) or len(result) != 2:
+                        continue
+                    session, result = result
+                    if session is not self.mesh_listener_stop:
+                        continue
+                    if key != 'mesh_reply_stopped' and (
+                            not self.mesh_listener_active or session.is_set()):
+                        continue
                 if key == 'mesh_field_trial':
                     if ok and hasattr(self, 'field_wizard'):
                         self.field_wizard.on_result(result)
@@ -1024,8 +1044,11 @@ class LibreBeaconApp:
                     self.mesh_fallback.cancel('Reply listener stopped. Pending backup cancelled.')
                     self.mesh_reply_state.set('Reply listener OFF. Restart to listen again.')
                 elif key=='mesh_reply_event':
+                    if not self.mesh_listener_ready:
+                        continue
                     matched = self.mesh_replies.receive(result)
-                    if matched is not None:
+                    if (matched is not None and self.mesh_listener_ready and
+                            self.mesh_listener_active and not self.mesh_listener_stop.is_set()):
                         self.mesh_fallback.reply(matched.reference, matched.destination, matched.response)
                         self.refresh_routes()
                         self.mesh_reply_state.set('Matching radio reply observed for ' + matched.reference +
@@ -1088,11 +1111,13 @@ class LibreBeaconApp:
                         backup = self.settings.mesh_fallback_backup
                         name = next((r.label for r in self.route_records if r.target == primary), None)
                         sent = next(((ok, ref) for label, ok, _, ref in result if label == name), None)
-                        if sent and sent[0] and sent[1] and self.mesh_listener_ready:
+                        listener_ready = (self.mesh_listener_ready and self.mesh_listener_active
+                                          and not self.mesh_listener_stop.is_set())
+                        if sent and sent[0] and sent[1] and listener_ready:
                             try:
                                 self.mesh_fallback.arm(primary, backup, sent[1],
                                     minutes=self.settings.mesh_fallback_minutes, now=time.monotonic(),
-                                    listener_ready=True)
+                                    listener_ready=listener_ready)
                             except ValueError:
                                 self.mesh_fallback.cancel('Invalid backup settings; no backup scheduled.')
                         else:

@@ -35,3 +35,7 @@ My next check is actual Windows sleep and radio loss, recorded in [the field che
 I now check the approved contact list, emergency alert switches and live reply-listener state immediately before a queued backup asks Home Assistant to transmit. That matters when somebody cancels or withdraws consent while the node lookup is taking its time. A matching CANT also stops short if the listener has disconnected.
 
 **Cancel Pending Backup** can revoke a queued request. It cannot recall one already accepted by Home Assistant, and an HTTP timeout isn't reliable evidence either way. Keep the official Libre alarm running independently. This check still needs a controlled trial with the actual gateway and receivers.
+
+## Listener restarts
+
+Queued Home Assistant events are bound to the listening session that received them. When a listener stops, its late replies and status messages cannot affect a subsequent session. An interrupted listener still cancels the pending automatic backup; restarting listening does not restore a missed fallback or replay an incident. A healthy Home Assistant socket is not proof of a delivered radio packet.

@@ -1,3 +1,10 @@
+## 4.16.0 - Keep radio replies tied to their listening session
+
+- I tied each reply, status update and shutdown notice to the Home Assistant listener that produced it. An old connection can no longer overwrite a new one's status or feed a late response into a current backup decision.
+- Each worker now keeps its own stop event when another listening session begins.
+- Backup timing and arming check that the current reply listener is both active and not stopping. A socket closing behind an apparently ready indicator is no reason to send another message.
+- Added queue-order and restart regression cases. Radio delivery and human attendance still need real-world checks.
+
 ## 4.15.0 - Backup contact cancellation
 
 - I made the queued Meshtastic backup check current consent, alert switches and recipient selection just before Home Assistant gets a message.
