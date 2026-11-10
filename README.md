@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.14.0** · experimental community prototype · MIT licence
+Current version: **4.15.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.14.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.15.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -97,6 +97,12 @@ Closing the wizard cancels a pending send. Once Home Assistant has already accep
 I now keep the specific Home Assistant gateway entity used during the guided Meshtastic check. Before sending a deliberately confirmed \`TEST ONLY\` message, LibreBeacon checks that the same gateway still exists and is reported connected. A different gateway won't be accepted just because its status also says connected.
 
 A configuration error before transmission clears the prepared test and requires a fresh check and preview. A failed request after starting is labelled **delivery unknown**, since a timeout doesn't establish what happened on the radio. Nothing here proves actual receiver coverage; see the [field-check instructions](docs/MESH_FIELD_WIZARD.md).
+
+## Backup cancellation checks (v4.15.0)
+
+I tightened the optional Meshtastic backup path. A pending CANT reply stops being usable when the listener disconnects, and a backup already queued for sending now checks the saved contact permissions and alert switches again. If the user cancels or changes the recipient while Home Assistant is looking up the node, the request is blocked before the send call.
+
+There's still a narrow limit worth remembering: once a request is handed to Home Assistant, cancelling it here cannot bring that packet back. A failed or timed-out request also doesn't prove it never transmitted. See [the backup setup guide](docs/MESH_FALLBACK.md).
 
 ## Safe mesh backup rehearsal (v4.10.0)
 

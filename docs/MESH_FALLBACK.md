@@ -29,3 +29,9 @@ I considered falling back to a channel broadcast when the recipient vanished. No
 The reply listener sends an authenticated Home Assistant WebSocket ping about every 20 seconds and requires the matching pong inside 10 seconds. A missing, wrong or late answer drops the listener. That prevents a **no reply** fallback from continuing while the connection is quietly dead. It is not a radio-delivery test. Disconnecting the gateway may still leave the Home Assistant WebSocket healthy; use the gateway diagnostics too.
 
 My next check is actual Windows sleep and radio loss, recorded in [the field checklist](MESH_FIELD_TRIAL.md). Until then keep automatic backup switched off unless you understand the limitations.
+
+## Queued messages and cancellation (v4.15.0)
+
+I now check the approved contact list, emergency alert switches and live reply-listener state immediately before a queued backup asks Home Assistant to transmit. That matters when somebody cancels or withdraws consent while the node lookup is taking its time. A matching CANT also stops short if the listener has disconnected.
+
+**Cancel Pending Backup** can revoke a queued request. It cannot recall one already accepted by Home Assistant, and an HTTP timeout isn't reliable evidence either way. Keep the official Libre alarm running independently. This check still needs a controlled trial with the actual gateway and receivers.
