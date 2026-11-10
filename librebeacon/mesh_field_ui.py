@@ -127,6 +127,8 @@ class MeshFieldWizard:
                    command=self.app.open_mesh_simulation).pack(side='left', padx=4)
 
     def close(self):
+        # A pending check doesn't get to send just because the window has gone.
+        self.model.cancel()
         self.session_key = ''
         self.root.destroy()
 
@@ -138,8 +140,9 @@ class MeshFieldWizard:
         self.send_label.set(f'Request: {model.request_result}. Receipt: {model.receipt}.')
         self.preview_label.set(model.prepared.body if model.prepared else 'No test prepared.')
         self.recipient_box.configure(state='disabled' if self.busy else 'readonly')
-        self.send_button.configure(state='normal' if model.prepared and not model.authorised
-                                   and model.request_result == 'NOT SENT' and not self.busy else 'disabled')
+        self.send_button.configure(state='normal' if model.prepared and model.preview_fresh()
+                                   and not model.authorised and model.request_result == 'NOT SENT'
+                                   and not self.busy else 'disabled')
         self.report_text.configure(state='normal')
         self.report_text.delete('1.0', tk.END)
         self.report_text.insert(tk.END, model.report(__version__))

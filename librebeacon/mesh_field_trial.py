@@ -6,6 +6,7 @@ It's tempting to mark a connected gateway as 'passed'. Don't.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from time import monotonic
 from dataclasses import dataclass, field
 
 from .contacts import ContactRoute
@@ -36,15 +37,40 @@ MANUAL_FIELD_CASES = tuple((code, label) for code, label in FIELD_CASES
                            if code not in ('02', '03', '04'))
 MANUAL_OUTCOMES = ('PASS', 'FAIL', 'NOT RUN')
 
+# Five minutes lets somebody read the screen without leaving an old approval
+# waiting there for the next person to find. Wall time catches Windows sleep;
+# the monotonic clock covers ordinary delays and clock adjustments.
+CHECK_LIFETIME_SECONDS = 300
+
+
+@dataclass(frozen=True)
+class CheckTime:
+    wall: datetime
+    tick: float
+
+    @classmethod
+    def now(cls) -> 'CheckTime':
+        return cls(datetime.now(timezone.utc), monotonic())
+
+    def fresh(self) -> bool:
+        wall_age = (datetime.now(timezone.utc) - self.wall).total_seconds()
+        tick_age = monotonic() - self.tick
+        return (-5 <= wall_age <= CHECK_LIFETIME_SECONDS and
+                0 <= tick_age <= CHECK_LIFETIME_SECONDS)
+
 
 @dataclass
 class MeshFieldTrial:
     """One session, one test request at a time. No persistence until Save."""
 
     route: ContactRoute | None = None
+    cancelled: bool = False
     gateway_observation: str = 'NOT CHECKED'
     gateway_ready: bool = False
     gateway_entity_id: str | None = None
+    gateway_checked_at: CheckTime | None = None
+    recipient_checked_at: CheckTime | None = None
+    previewed_at: CheckTime | None = None
     recipient_observation: str = 'NOT CHECKED'
     recipient_checked: bool = False
     owner_confirmed: bool = False
@@ -55,12 +81,23 @@ class MeshFieldTrial:
     cases: dict[str, str] = field(default_factory=lambda: {key: 'NOT RUN' for key, _ in FIELD_CASES})
     started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    def cancel(self) -> None:
+        # Closing the wizard revokes the next attempt. Can't unsend a packet
+        # already given to HA, though. That would be a neat trick.
+        self.cancelled = True
+        self.authorised = False
+        self.prepared = None
+
     def select(self, route: ContactRoute) -> None:
+        if self.cancelled:
+            raise ValueError('The field test was cancelled')
         route.validate()
         if not is_mesh_entity(route.target) or not route.enabled or not route.consent or route.mesh_node_id is None:
             raise ValueError('Choose an enabled, consented individual mesh recipient')
         self.route = route
         self.recipient_checked = False
+        self.recipient_checked_at = None
+        self.previewed_at = None
         self.owner_confirmed = False
         self.recipient_observation = 'NOT CHECKED'
         self.prepared = None
@@ -80,9 +117,12 @@ class MeshFieldTrial:
                                   and gateway.status == 'HA REPORTS CONNECTED'
                                   and gateway.entity_id.startswith('meshtastic.'))
         self.gateway_entity_id = gateway.entity_id if self.gateway_ready else None
+        self.gateway_checked_at = CheckTime.now() if self.gateway_ready else None
         self.gateway_observation = ('HA REPORTS CONNECTED' if self.gateway_ready else
                                     'GATEWAY NOT VERIFIED')
         self.recipient_checked = False
+        self.recipient_checked_at = None
+        self.previewed_at = None
         self.owner_confirmed = False
         self.recipient_observation = 'NOT CHECKED'
         self.prepared = None
@@ -98,6 +138,8 @@ class MeshFieldTrial:
 
     def recipient_checked_result(self, matches: bool) -> None:
         self.recipient_checked = bool(matches and self.gateway_ready and self.route is not None)
+        self.recipient_checked_at = CheckTime.now() if self.recipient_checked else None
+        self.previewed_at = None
         self.owner_confirmed = False
         self.recipient_observation = 'NODE ID MATCHED' if self.recipient_checked else 'NOT VERIFIED'
         self.cases['02'] = 'SOFTWARE CHECK ONLY' if self.recipient_checked else 'NOT RUN'
@@ -117,10 +159,28 @@ class MeshFieldTrial:
         self.owner_confirmed = True
         self.cases['02'] = 'OPERATOR REPORTED IDENTITY CHECK'
 
+    def checks_fresh(self) -> bool:
+        return (self.gateway_ready and self.recipient_checked and
+                self.gateway_checked_at is not None and self.gateway_checked_at.fresh() and
+                self.recipient_checked_at is not None and self.recipient_checked_at.fresh())
+
+    def preview_fresh(self) -> bool:
+        return (self.checks_fresh() and self.previewed_at is not None and
+                self.previewed_at.fresh())
+
     def preview(self) -> MeshText:
-        if not self.gateway_ready or not self.recipient_checked or not self.owner_confirmed or self.route is None:
+        if self.cancelled:
+            raise ValueError('The field test was cancelled')
+        if (not self.gateway_ready or not self.recipient_checked or
+                not self.owner_confirmed or self.route is None):
             raise ValueError('Check the gateway and confirm the receiver with its owner first')
+        if not self.checks_fresh():
+            self.prepared = None
+            self.previewed_at = None
+            self.authorised = False
+            raise ValueError('Gateway or recipient check expired. Check both again before preparing a test')
         self.prepared = build_mesh_message('test')
+        self.previewed_at = CheckTime.now()
         self.authorised = False
         self.request_result = 'NOT SENT'
         self.receipt = 'NOT CONFIRMED'
@@ -131,13 +191,25 @@ class MeshFieldTrial:
         return self.prepared
 
     def approve(self) -> None:
+        if self.cancelled:
+            raise ValueError('The field test was cancelled')
         if self.prepared is None or not self.gateway_ready or not self.recipient_checked or not self.owner_confirmed:
             raise ValueError('Preview a test and check the recipient first')
         if self.request_result != 'NOT SENT':
             raise ValueError('A new test needs a fresh preview')
+        if not self.preview_fresh():
+            self.prepared = None
+            self.authorised = False
+            raise ValueError('The test preview expired. Recheck the gateway and recipient')
         self.authorised = True
 
     def consume_send(self) -> tuple[ContactRoute, MeshText]:
+        if self.cancelled:
+            raise ValueError('The field test was cancelled')
+        if not self.preview_fresh():
+            self.authorised = False
+            self.prepared = None
+            raise ValueError('The test approval expired. Recheck the gateway and recipient')
         if (not self.authorised or self.prepared is None or self.route is None
                 or not self.gateway_ready or not self.recipient_checked or not self.owner_confirmed
                 or self.request_result != 'NOT SENT'):
@@ -219,5 +291,14 @@ def send_confirmed_field_test(client, trial: MeshFieldTrial, approved_routes: li
             or current[0].status != 'HA REPORTS CONNECTED'
             or current[0].entity_id != trial.gateway_entity_id):
         raise ValueError('Meshtastic gateway changed or is no longer verified')
+    if trial.cancelled or not trial.preview_fresh():
+        raise ValueError('Field test cancelled or verification expired during gateway check')
+
+    def still_allowed() -> None:
+        # This runs after HA's recipient lookup, right before requesting a send.
+        if trial.cancelled or not trial.preview_fresh():
+            raise ValueError('Field test cancelled or verification expired before transmission')
+
     return dispatch_route(client, route, prepared.body,
-                          mesh_kind='test', mesh_text=prepared)
+                          mesh_kind='test', mesh_text=prepared,
+                          before_mesh_send=still_allowed)

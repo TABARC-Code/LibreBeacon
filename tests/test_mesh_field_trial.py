@@ -1,6 +1,7 @@
 """A field check must never become an unattended radio test."""
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from dataclasses import replace
 from librebeacon.contacts import ContactRoute
 from librebeacon.mesh_field_trial import FIELD_CASES, MeshFieldTrial, send_confirmed_field_test
 from librebeacon.mesh_health import GatewayStatus
@@ -302,6 +303,119 @@ class FieldTrialTests(unittest.TestCase):
         self.assertEqual(t.request_result, 'BLOCKED BEFORE SEND')
         self.assertFalse(t.authorised)
         self.assertTrue(output)
+
+    def test_old_gateway_check_cannot_be_previewed(self):
+        t = self.ready()
+        t.gateway_checked_at = replace(t.gateway_checked_at,
+                                       wall=t.gateway_checked_at.wall - timedelta(minutes=6))
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            t.preview()
+        self.assertIsNone(t.prepared)
+
+    def test_old_recipient_check_cannot_be_previewed(self):
+        t = self.ready()
+        t.recipient_checked_at = replace(t.recipient_checked_at,
+                                         wall=t.recipient_checked_at.wall - timedelta(minutes=6))
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            t.preview()
+
+    def test_sleep_simulation_expires_preview_before_approval(self):
+        t = self.ready(); t.preview()
+        t.previewed_at = replace(t.previewed_at,
+                                 wall=t.previewed_at.wall - timedelta(minutes=6))
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            t.approve()
+        self.assertFalse(t.authorised)
+        self.assertIsNone(t.prepared)
+
+    def test_late_gateway_check_blocks_radio_transmission(self):
+        t = self.ready(); t.preview(); t.approve()
+        t.gateway_checked_at = replace(t.gateway_checked_at,
+                                       wall=t.gateway_checked_at.wall - timedelta(minutes=6))
+        c = FakeClient()
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            send_confirmed_field_test(c, t, [ROUTE])
+        self.assertEqual(c.calls, [])
+        self.assertFalse(t.authorised)
+
+    def test_monotonic_timing_expiry_also_blocks_test(self):
+        t = self.ready(); t.preview(); t.approve()
+        t.previewed_at = replace(t.previewed_at, tick=t.previewed_at.tick - 500)
+        c = FakeClient()
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            send_confirmed_field_test(c, t, [ROUTE])
+        self.assertEqual(c.calls, [])
+
+    def test_clock_moved_backward_blocks_old_approval(self):
+        t = self.ready(); t.preview()
+        t.previewed_at = replace(t.previewed_at,
+                                 wall=t.previewed_at.wall + timedelta(minutes=3))
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            t.approve()
+        self.assertFalse(t.authorised)
+
+    def test_aging_during_gateway_query_stops_send(self):
+        t = self.ready(); t.preview(); t.approve()
+        class SlowState(FakeClient):
+            def states(self):
+                t.previewed_at = replace(t.previewed_at,
+                                         wall=t.previewed_at.wall - timedelta(minutes=6))
+                return super().states()
+        c = SlowState()
+        with self.assertRaisesRegex(ValueError, 'expired'):
+            send_confirmed_field_test(c, t, [ROUTE])
+        self.assertFalse(any(isinstance(call, tuple) for call in c.calls))
+
+
+    def test_cancelled_wizard_cannot_send(self):
+        t = self.ready(); t.preview(); t.approve(); t.cancel()
+        c = FakeClient()
+        with self.assertRaisesRegex(ValueError, 'cancelled'):
+            send_confirmed_field_test(c, t, [ROUTE])
+        self.assertFalse(t.authorised)
+        self.assertIsNone(t.prepared)
+        self.assertEqual(c.calls, [])
+
+    def test_cancel_during_gateway_lookup_stops_before_notification(self):
+        t = self.ready(); t.preview(); t.approve()
+        class ClosingGateway(FakeClient):
+            def states(self):
+                states = super().states()
+                t.cancel()
+                return states
+        c = ClosingGateway()
+        with self.assertRaisesRegex(ValueError, 'cancelled'):
+            send_confirmed_field_test(c, t, [ROUTE])
+        self.assertFalse(any(isinstance(x, tuple) for x in c.calls))
+
+    def test_cancel_during_node_lookup_stops_before_send(self):
+        t = self.ready(); t.preview(); t.approve()
+        class ClosingNode(FakeClient):
+            def state(self, entity):
+                result = super().state(entity)
+                t.cancel()
+                return result
+        c = ClosingNode()
+        with self.assertRaisesRegex(ValueError, 'cancelled'):
+            send_confirmed_field_test(c, t, [ROUTE])
+        self.assertFalse(any(isinstance(x, tuple) for x in c.calls))
+
+    def test_cancelled_test_cannot_start_a_fresh_preview(self):
+        t = self.ready(); t.cancel()
+        with self.assertRaises(ValueError): t.preview()
+        with self.assertRaises(ValueError): t.approve()
+
+    def test_close_cancels_field_model(self):
+        from types import SimpleNamespace
+        from librebeacon.mesh_field_ui import MeshFieldWizard
+        t = self.ready(); t.preview()
+        closed = []
+        stub = SimpleNamespace(model=t, session_key='live',
+                               root=SimpleNamespace(destroy=lambda: closed.append(True)))
+        MeshFieldWizard.close(stub)
+        self.assertTrue(t.cancelled)
+        self.assertEqual(stub.session_key, '')
+        self.assertEqual(closed, [True])
 
 if __name__ == '__main__':
     unittest.main()

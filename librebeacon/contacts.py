@@ -90,7 +90,8 @@ def emergency_message(include_value: bool = False, mmol: float | None = None) ->
 
 def dispatch_route(client: HomeAssistant, route: ContactRoute, message: str, *,
                    mesh_kind: str | None = None, mesh_text: MeshText | None = None,
-                   include_value: bool = False, mmol: float | None = None) -> str:
+                   include_value: bool = False, mmol: float | None = None,
+                   before_mesh_send: Callable[[], None] | None = None) -> str:
     """Send through HA and return a mesh reference when there is one.
 
     Preserve ordinary notify/script wording. Mesh contacts get a deliberately
@@ -110,8 +111,12 @@ def dispatch_route(client: HomeAssistant, route: ContactRoute, message: str, *,
         # have swapped the node. Radio networking already has enough surprises.
         require_mesh_choice(route.target, [client.state(route.target)],
                             expected_node_id=route.mesh_node_id)
+        if before_mesh_send is not None:
+            before_mesh_send()
         client.send_notification(route.target, prepared.body)
         return prepared.reference
+    if before_mesh_send is not None:
+        raise ValueError('The pre-send check applies only to mesh contacts')
     if mesh_kind is not None or mesh_text is not None:
         raise ValueError('Mesh message options cannot be sent to other contacts')
     if route.target.startswith('notify.'):
