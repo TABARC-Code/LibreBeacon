@@ -25,6 +25,7 @@ class ListenerSessionTests(TestCase):
             refresh_routes=Mock(), status=SimpleNamespace(set=lambda text: None),
             busy_poll=False,
         )
+        app.process_queue = lambda: None  # The fake Tk root never schedules a second pass.
         return app, statuses
 
     def flush(self, app):

@@ -98,7 +98,7 @@ I now keep the specific Home Assistant gateway entity used during the guided Mes
 
 A configuration error before transmission clears the prepared test and requires a fresh check and preview. A failed request after starting is labelled **delivery unknown**, since a timeout doesn't establish what happened on the radio. Nothing here proves actual receiver coverage; see the [field-check instructions](docs/MESH_FIELD_WIZARD.md).
 
-## Backup cancellation checks (v4.16.0)
+## Backup cancellation checks (v4.15.0)
 
 I tightened the optional Meshtastic backup path. A pending CANT reply stops being usable when the listener disconnects, and a backup already queued for sending now checks the saved contact permissions and alert switches again. If the user cancels or changes the recipient while Home Assistant is looking up the node, the request is blocked before the send call.
 
