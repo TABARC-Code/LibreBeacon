@@ -1,3 +1,10 @@
+## 4.11.0 - Guided Meshtastic field check
+
+- I added a three-page field-check window for gateway observation, recipient verification, a one-off TEST ONLY message and a private local report.
+- I kept sending behind an explicit preview and second confirmation. The gateway, consent and pinned node identity are checked again immediately before the request.
+- I separated Home Assistant acceptance from user-reported receipt. Rechecking the gateway or recipient clears the previous result rather than borrowing a success from another test.
+- I added the field-check guide and updated the checklist. Actual radio delivery and Windows accessibility still need checking.
+
 ## 4.10.0 - Safe mesh backup rehearsal
 
 - I added a button-led rehearsal for the main fallback cases using fictional nodes and a fixed clock.

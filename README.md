@@ -1,10 +1,8 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.10.0** · experimental community prototype · MIT licence
+Current version: **4.11.0** · experimental community prototype · MIT licence
 
----
-ok note I edited and refud this with llm. (before anyone ats me. Dyslexic, and I ramble. it was 5 sides of a A4. it cut down)
 ---
 
 ## Notice
@@ -40,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.10.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.11.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -96,6 +94,14 @@ This is useful for explaining the decisions; it isn't a replacement for a Window
 
 **Next idea (not yet built):** a [guided real-device check](docs/MESH_FIELD_WIZARD_IDEA.md) using the existing field-trial cases, with recipient confirmation, a deliberate TEST ONLY send and a local result report. No automatic sending or new alarm behaviour.
 
+## Guided Meshtastic field check (v4.11.0)
+
+I've added a three-step **TEST ONLY** field-check window to Start Here and Emergency contacts. It checks the Home Assistant gateway and pinned receiver ID, asks the operator to confirm who owns the radio, shows the exact test message and requires a separate send confirmation. One explicit request is permitted; no live glucose event, automatic follow-up or public-channel fallback is triggered.
+
+The report stays in memory until someone chooses **Save Redacted Report**. It records request and operator-reported receipt as different things, without including the person's name, node ID, message text or glucose history. Rechecking the recipient clears old receipt status. This is still untested with real radios and Windows screen readers.
+
+[Field-check guide](docs/MESH_FIELD_WIZARD.md) · [Hands-on checklist](docs/MESH_FIELD_TRIAL.md)
+
 ## What does and doesn't work yet
 
 **Implemented in source and checked with automated tests:** Home Assistant REST client, secure local token-store integration, desktop setup screens, sensor selection, measurement timestamp checks, ordinary/critical-low detection, duplicate suppression, sound, Windows speech, desktop visual notice, Home Assistant scripts, and opt-in notification targets. A Linux virtual-display smoke test can instantiate the desktop interface.
@@ -110,6 +116,7 @@ Windows Phone Link may mirror the official Libre phone notifications, but LibreB
 - [Adding contacts, including Meshtastic](docs/CONTACTS_AND_MESHTASTIC.md)
 - [Understanding Meshtastic gateway checks](docs/MESH_GATEWAY_HEALTH.md)
 - [Meshtastic field-test checklist](docs/MESH_FIELD_TRIAL.md)
+- [Guided Meshtastic field-check window](docs/MESH_FIELD_WIZARD.md)
 - [Guided real-device check idea — needs testing](docs/MESH_FIELD_WIZARD_IDEA.md)
 - [Safe mesh backup rehearsal](docs/MESH_SIMULATION.md)
 - [Accessibility and testing notes](docs/ACCESSIBILITY.md)

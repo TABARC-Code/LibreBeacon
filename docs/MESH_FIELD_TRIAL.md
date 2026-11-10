@@ -4,6 +4,8 @@ This is a practical checklist for an owner with a Windows PC, Home Assistant, on
 
 **Use TEST ONLY messages. Never deliberately create a dangerous glucose reading, change somebody's treatment, disable official Libre alarms or rely on this experiment for emergency contact.** Any medical context should use the real monitoring app and the person's agreed care plan.
 
+The optional [guided Windows field check](MESH_FIELD_WIZARD.md) can help with the first recipient check and a single labelled radio test. It leaves all physical observations unverified until you do the work.
+
 ## What to have on the bench
 
 - Windows computer with LibreBeacon installed, powered and prevented from sleeping during the ordinary test. Test sleep separately, once messages have stopped.
