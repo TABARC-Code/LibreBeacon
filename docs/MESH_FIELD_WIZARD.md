@@ -59,3 +59,9 @@ I keep the gateway check, recipient check and preview valid for at most five min
 Closing the window revokes pending permission, including while Home Assistant is still answering a gateway or recipient query. The sender checks once more immediately before requesting the notification. A request that's already been accepted cannot be withdrawn, so I still need the recipient to confirm what actually arrived.
 
 This is a guard against old test requests, not a radio coverage guarantee.
+
+## Consent changes while a test is being prepared
+
+A send confirmation doesn't freeze the recipient's permission. The wizard checks the currently saved recipient again after asking Home Assistant for the node's identity, immediately before the notification request. If consent, node number or destination approval changes, the test is **BLOCKED BEFORE SEND** and a new preview is required. If the notification request itself fails or times out, delivery is still **UNKNOWN**; there is no automatic retry. Once a request has been handed to Home Assistant it cannot be recalled.
+
+This closes a software race. It doesn't prove that a Meshtastic receiver obtained or displayed the packet.

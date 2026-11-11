@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.18.0** · experimental community prototype · MIT licence
+Current version: **4.19.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.18.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.19.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -131,6 +131,10 @@ The Home Assistant radio-reply listener now ties every queued reply and connecti
 ## Radio reply retention (v4.17.0)
 
 Radio replies are tracked only in memory while LibreBeacon runs. A request has a 30-minute reply window; its status remains in memory for another hour before clean-up on subsequent activity. Tracking is limited to 512 recent incidents, and Home Assistant events delayed by more than two minutes are ignored by automatic acknowledgement logic. The reference, node-number and gateway checks are **not cryptographic authentication** and don't establish human assistance. A missed reply is not proof that no reply was sent. See [Meshtastic messaging](docs/MESH_MESSAGING.md).
+
+## Field-check consent revocation (v4.19.0)
+
+The guided TEST ONLY wizard now checks the live contact settings again after Home Assistant looks up the recipient, immediately before it requests a radio transmission. If consent, the saved node identity or the enabled destination has changed, it blocks the test and clears the approval. A definite pre-send block is recorded separately from a request failure where delivery cannot be established. A request already submitted to Home Assistant cannot be recalled.
 
 ## What does and doesn't work yet
 

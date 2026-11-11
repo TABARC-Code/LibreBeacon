@@ -1,3 +1,10 @@
+## 4.19.0 - Recheck test consent at transmission
+
+- I closed a gap in the guided Meshtastic test: a recipient could lose consent while Home Assistant was answering a slow node lookup. The sender now consults current contact settings again before the notification request.
+- Removed the frozen approved-route snapshot from the test-send worker. Missing live settings are a reason to stop, not a reason to guess.
+- The field report distinguishes a request blocked before sending from an attempted request whose delivery remains uncertain.
+- Added regression cases for contact revocation, changed node identity, unavailable current settings and the UI result labels. These are simulated network checks, not a real radio trial.
+
 ## 4.18.0 - Reply parser resilience
 
 - I stopped the reply parser from encoding incoming text merely to check its length. Malformed Unicode can now be rejected as an ordinary invalid event rather than interrupting reply processing.

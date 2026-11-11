@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timezone, timedelta
 from dataclasses import replace
 from librebeacon.contacts import ContactRoute
-from librebeacon.mesh_field_trial import FIELD_CASES, MeshFieldTrial, send_confirmed_field_test
+from librebeacon.mesh_field_trial import FIELD_CASES, MeshFieldTrial, FieldTestBlocked, send_confirmed_field_test
 from librebeacon.mesh_health import GatewayStatus
 
 
@@ -89,7 +89,7 @@ class FieldTrialTests(unittest.TestCase):
         model.preview(); model.approve()
         client=FakeClient()
         with self.assertRaises(ValueError):
-            send_confirmed_field_test(client,model,[])
+            send_confirmed_field_test(client, model, lambda: [])
         self.assertEqual(client.calls,[])
 
     def test_preview_never_sends(self):
@@ -98,7 +98,7 @@ class FieldTrialTests(unittest.TestCase):
         preview = t.preview()
         self.assertIn('TEST ONLY', preview.body)
         self.assertNotIn('glucose', preview.body.casefold())
-        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
+        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, lambda: [ROUTE, OTHER])
         self.assertEqual(client.calls, [])
 
     def test_explicit_approval_sends_only_once(self):
@@ -106,12 +106,12 @@ class FieldTrialTests(unittest.TestCase):
         t = self.ready()
         t.preview()
         t.approve()
-        ref = send_confirmed_field_test(client, t, [ROUTE, OTHER])
+        ref = send_confirmed_field_test(client, t, lambda: [ROUTE, OTHER])
         self.assertTrue(ref.startswith('LB-'))
         self.assertEqual(len([x for x in client.calls if isinstance(x,tuple)]), 1)
         self.assertEqual(client.calls[-1][1], ROUTE.target)
         self.assertIn('TEST ONLY', client.calls[-1][2])
-        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
+        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, lambda: [ROUTE, OTHER])
         self.assertEqual(len([x for x in client.calls if isinstance(x,tuple)]), 1)
         t.sent(True)
         self.assertEqual(t.cases['03'], 'HA REQUEST ACCEPTED ONLY')
@@ -121,17 +121,17 @@ class FieldTrialTests(unittest.TestCase):
         client = FakeClient(gateway='Disconnected')
         t = self.ready()
         t.preview(); t.approve()
-        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
+        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, lambda: [ROUTE, OTHER])
         self.assertNotIn('notify', client.calls)
         t.sent(False)
         self.assertEqual(t.request_result, 'REQUEST FAILED; DELIVERY UNKNOWN')
-        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
+        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, lambda: [ROUTE, OTHER])
 
     def test_replaced_node_blocks_send(self):
         client = FakeClient(node=0xAABB23)
         t = self.ready()
         t.preview(); t.approve()
-        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, [ROUTE, OTHER])
+        with self.assertRaises(ValueError): send_confirmed_field_test(client, t, lambda: [ROUTE, OTHER])
         self.assertFalse(any(isinstance(x, tuple) for x in client.calls))
         t.sent(False)
 
@@ -243,7 +243,7 @@ class FieldTrialTests(unittest.TestCase):
                 return records
         client = SwitchedGateway()
         with self.assertRaisesRegex(ValueError, 'gateway changed'):
-            send_confirmed_field_test(client, t, [ROUTE])
+            send_confirmed_field_test(client, t, lambda: [ROUTE])
         self.assertFalse(any(isinstance(c, tuple) for c in client.calls))
         t.failed_send()
         self.assertEqual(t.request_result, 'REQUEST FAILED; DELIVERY UNKNOWN')
@@ -282,7 +282,7 @@ class FieldTrialTests(unittest.TestCase):
         t = self.ready()
         t.preview(); t.approve()
         c = FakeClient()
-        ref = send_confirmed_field_test(c, t, [ROUTE])
+        ref = send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertTrue(ref.startswith('LB-'))
         self.assertEqual(len([call for call in c.calls if isinstance(call, tuple)]), 1)
 
@@ -334,7 +334,7 @@ class FieldTrialTests(unittest.TestCase):
                                        wall=t.gateway_checked_at.wall - timedelta(minutes=6))
         c = FakeClient()
         with self.assertRaisesRegex(ValueError, 'expired'):
-            send_confirmed_field_test(c, t, [ROUTE])
+            send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertEqual(c.calls, [])
         self.assertFalse(t.authorised)
 
@@ -343,7 +343,7 @@ class FieldTrialTests(unittest.TestCase):
         t.previewed_at = replace(t.previewed_at, tick=t.previewed_at.tick - 500)
         c = FakeClient()
         with self.assertRaisesRegex(ValueError, 'expired'):
-            send_confirmed_field_test(c, t, [ROUTE])
+            send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertEqual(c.calls, [])
 
     def test_clock_moved_backward_blocks_old_approval(self):
@@ -363,7 +363,7 @@ class FieldTrialTests(unittest.TestCase):
                 return super().states()
         c = SlowState()
         with self.assertRaisesRegex(ValueError, 'expired'):
-            send_confirmed_field_test(c, t, [ROUTE])
+            send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertFalse(any(isinstance(call, tuple) for call in c.calls))
 
 
@@ -371,7 +371,7 @@ class FieldTrialTests(unittest.TestCase):
         t = self.ready(); t.preview(); t.approve(); t.cancel()
         c = FakeClient()
         with self.assertRaisesRegex(ValueError, 'cancelled'):
-            send_confirmed_field_test(c, t, [ROUTE])
+            send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertFalse(t.authorised)
         self.assertIsNone(t.prepared)
         self.assertEqual(c.calls, [])
@@ -385,7 +385,7 @@ class FieldTrialTests(unittest.TestCase):
                 return states
         c = ClosingGateway()
         with self.assertRaisesRegex(ValueError, 'cancelled'):
-            send_confirmed_field_test(c, t, [ROUTE])
+            send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertFalse(any(isinstance(x, tuple) for x in c.calls))
 
     def test_cancel_during_node_lookup_stops_before_send(self):
@@ -397,7 +397,7 @@ class FieldTrialTests(unittest.TestCase):
                 return result
         c = ClosingNode()
         with self.assertRaisesRegex(ValueError, 'cancelled'):
-            send_confirmed_field_test(c, t, [ROUTE])
+            send_confirmed_field_test(c, t, lambda: [ROUTE])
         self.assertFalse(any(isinstance(x, tuple) for x in c.calls))
 
     def test_cancelled_test_cannot_start_a_fresh_preview(self):
@@ -416,6 +416,70 @@ class FieldTrialTests(unittest.TestCase):
         self.assertTrue(t.cancelled)
         self.assertEqual(stub.session_key, '')
         self.assertEqual(closed, [True])
+
+    def test_revocation_during_node_lookup_blocks_before_notification(self):
+        t = self.ready(); t.preview(); t.approve()
+        allowed = [ROUTE]
+        class SlowClient(FakeClient):
+            def state(self, entity):
+                found = super().state(entity)
+                allowed.clear()  # Consent withdrawn while HA was answering.
+                return found
+        c = SlowClient()
+        with self.assertRaises(FieldTestBlocked):
+            send_confirmed_field_test(c, t, lambda: list(allowed))
+        self.assertFalse(any(isinstance(call,tuple) for call in c.calls))
+        t.failed_send(blocked=True)
+        self.assertEqual(t.request_result,'BLOCKED BEFORE SEND')
+        self.assertEqual(t.cases['03'],'BLOCKED BEFORE SEND')
+
+    def test_recipient_node_changed_during_lookup_blocks_before_send(self):
+        t = self.ready(); t.preview(); t.approve()
+        approved = [ROUTE]
+        class SwitchedRoute(FakeClient):
+            def state(self, entity):
+                found=super().state(entity)
+                approved[:] = [ContactRoute(ROUTE.label, ROUTE.target, True, True, 0xAABB23)]
+                return found
+        c=SwitchedRoute()
+        with self.assertRaises(FieldTestBlocked):
+            send_confirmed_field_test(c,t,lambda: list(approved))
+        self.assertFalse(any(isinstance(call,tuple) for call in c.calls))
+
+    def test_unavailable_live_permission_supplier_fails_closed(self):
+        t=self.ready(); t.preview(); t.approve()
+        c=FakeClient()
+        with self.assertRaises(FieldTestBlocked):
+            send_confirmed_field_test(c,t,[ROUTE])
+        self.assertEqual(c.calls,[])
+
+    def test_permission_supplier_used_before_and_after_home_assistant(self):
+        t=self.ready(); t.preview(); t.approve()
+        c=FakeClient()
+        checks=[]
+        def current():
+            checks.append(1)
+            return [ROUTE]
+        send_confirmed_field_test(c,t,current)
+        self.assertEqual(len(checks),3)
+        self.assertEqual(len([x for x in c.calls if isinstance(x,tuple)]),1)
+
+    def test_ui_reports_definite_block_separately_from_uncertain_failure(self):
+        from types import SimpleNamespace
+        from librebeacon.mesh_field_ui import MeshFieldWizard
+        for status, expected in (
+            ('FieldTestBlocked','BLOCKED BEFORE SEND'),
+            ('HomeAssistantError','REQUEST FAILED; DELIVERY UNKNOWN')):
+            with self.subTest(status=status):
+                model=self.ready(); model.preview(); model.approve(); model.consume_send()
+                stub=SimpleNamespace(
+                    model=model,busy=True,session_key='x',
+                    root=SimpleNamespace(winfo_exists=lambda: True),
+                    status=SimpleNamespace(set=lambda text: None),
+                    refresh=lambda: None)
+                MeshFieldWizard.on_result(stub,('x','send',False,status))
+                self.assertEqual(model.request_result,expected)
+
 
 if __name__ == '__main__':
     unittest.main()

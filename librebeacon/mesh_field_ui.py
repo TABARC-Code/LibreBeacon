@@ -254,8 +254,11 @@ class MeshFieldWizard:
             messagebox.showerror('Test not ready', str(exc))
             return
         def run():
-            approved = read_routes(self.app.settings.emergency_routes)
-            return send_confirmed_field_test(client, self.model, approved)
+            # The callback runs again after HA's node lookup. This must read
+            # the current consent, not a copy taken before the network call.
+            def current_routes():
+                return read_routes(self.app.settings.emergency_routes)
+            return send_confirmed_field_test(client, self.model, current_routes)
         self._submit('send', run)
 
     def confirm_receipt(self):
@@ -284,7 +287,7 @@ class MeshFieldWizard:
             elif action == 'recipient':
                 self.model.recipient_checked_result(False)
             elif action == 'send':
-                self.model.failed_send()
+                self.model.failed_send(blocked=(payload == 'FieldTestBlocked'))
             self.status.set('Check failed (' + payload + '). No delivery claim made.')
             self.refresh()
             return

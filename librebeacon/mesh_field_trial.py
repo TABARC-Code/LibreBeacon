@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from time import monotonic
 from dataclasses import dataclass, field
+from typing import Callable
 
 from .contacts import ContactRoute
 from .meshtastic import is_mesh_entity
@@ -41,6 +42,10 @@ MANUAL_OUTCOMES = ('PASS', 'FAIL', 'NOT RUN')
 # waiting there for the next person to find. Wall time catches Windows sleep;
 # the monotonic clock covers ordinary delays and clock adjustments.
 CHECK_LIFETIME_SECONDS = 300
+
+
+class FieldTestBlocked(ValueError):
+    """A field test was stopped before requesting a notification."""
 
 
 @dataclass(frozen=True)
@@ -224,15 +229,14 @@ class MeshFieldTrial:
         self.request_result = 'ACCEPTED BY HA; DELIVERY UNKNOWN' if accepted else 'REQUEST FAILED; DELIVERY UNKNOWN'
         self.cases['03'] = 'HA REQUEST ACCEPTED ONLY' if accepted else 'REQUEST FAILED; DELIVERY UNKNOWN'
 
-    def failed_send(self) -> None:
-        """A validation error can happen before the worker consumes permission.
+    def failed_send(self, *, blocked: bool = False) -> None:
+        """Keep a definite pre-send block separate from an uncertain request.
 
-        Clear the preview either way. Leaving the approval armed after a bad
-        contact-file read would make the next click a rather nasty surprise.
+        An HA timeout is still uncertain. A failed local consent check isn't.
         """
-        if self.request_result == 'IN PROGRESS':
+        if self.request_result == 'IN PROGRESS' and not blocked:
             self.sent(False)
-        elif self.request_result == 'NOT SENT':
+        elif self.request_result in ('NOT SENT', 'IN PROGRESS'):
             self.authorised = False
             self.prepared = None
             self.request_result = 'BLOCKED BEFORE SEND'
@@ -277,28 +281,31 @@ class MeshFieldTrial:
         return '\n'.join(lines) + '\n'
 
 
-def send_confirmed_field_test(client, trial: MeshFieldTrial, approved_routes: list[ContactRoute]) -> str:
-    """Recheck the gateway and recipient immediately before that one send.
+def send_confirmed_field_test(client, trial: MeshFieldTrial,
+                              current_routes: Callable[[], list[ContactRoute]]) -> str:
+    """Spend one permission and recheck consent before handing anything to HA.
 
-    Never call this for a preview. The session spends its permission once,
-    even when Home Assistant fails. No optimistic retries, thanks.
+    This needs a live route supplier, not an old snapshot from when someone
+    clicked Confirm. A slow node lookup is quite enough room for a revocation.
     """
     route, prepared = trial.consume_send()
-    if route not in approved_routes:
-        raise ValueError('Recipient authorisation changed; recheck before sending')
+    if not callable(current_routes):
+        raise FieldTestBlocked('Current contact permission check is unavailable')
+
+    def approved_now() -> None:
+        if route not in current_routes():
+            raise FieldTestBlocked('Recipient authorisation changed; recheck before sending')
+        if trial.cancelled or not trial.preview_fresh():
+            raise FieldTestBlocked('Field test cancelled or verification expired before transmission')
+
+    approved_now()
     current = discover_gateways(client.states(), now=datetime.now(timezone.utc))
     if (len(current) != 1 or not current[0].verified_type
             or current[0].status != 'HA REPORTS CONNECTED'
             or current[0].entity_id != trial.gateway_entity_id):
-        raise ValueError('Meshtastic gateway changed or is no longer verified')
-    if trial.cancelled or not trial.preview_fresh():
-        raise ValueError('Field test cancelled or verification expired during gateway check')
-
-    def still_allowed() -> None:
-        # This runs after HA's recipient lookup, right before requesting a send.
-        if trial.cancelled or not trial.preview_fresh():
-            raise ValueError('Field test cancelled or verification expired before transmission')
+        raise FieldTestBlocked('Meshtastic gateway changed or is no longer verified')
+    approved_now()
 
     return dispatch_route(client, route, prepared.body,
                           mesh_kind='test', mesh_text=prepared,
-                          before_mesh_send=still_allowed)
+                          before_mesh_send=approved_now)
