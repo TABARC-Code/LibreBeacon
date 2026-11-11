@@ -13,6 +13,12 @@ import re
 _REPLY = re.compile(r'^(LB-[0-9A-F]{16}) (OK|CANT)$')
 _REFERENCE = re.compile(r'^LB-[0-9A-F]{16}$')
 
+# HA's timestamp is when it observed the packet. A badly delayed event
+# shouldn't masquerade as a fresh reply after Windows reconnects.
+MAX_EVENT_AGE = timedelta(minutes=2)
+RETAIN_AFTER_EXPIRY = timedelta(minutes=60)
+MAX_TRACKED_INCIDENTS = 512
+
 
 def node_number(value: object) -> int:
     """Accept a node's decimal number or the standard !1234abcd representation."""
@@ -50,19 +56,41 @@ class MeshReplyTracker:
     """In-memory, fail-closed matching; closing the app discards active incidents."""
     def __init__(self):
         self.incidents: dict[str, IncidentReply] = {}
-        self.seen_packets: set[tuple[int, int, int]] = set()
+        self.seen_packets: set[tuple[str, int, int, int]] = set()
+
+    def prune(self, *, now: datetime | None = None) -> int:
+        """Drop old reply records and the packet IDs attached to them.
+
+        The active window is 30 minutes. We keep expired statuses for one
+        more hour, then let them go. None of this is written to disk.
+        """
+        current = datetime.now(timezone.utc) if now is None else now
+        if not isinstance(current, datetime) or current.tzinfo is None:
+            raise ValueError('Use an aware time to clean up reply tracking')
+        current = current.astimezone(timezone.utc)
+        stale = {ref for ref, item in self.incidents.items()
+                 if current > item.expires_at + RETAIN_AFTER_EXPIRY}
+        for ref in stale:
+            del self.incidents[ref]
+        if stale:
+            self.seen_packets = {key for key in self.seen_packets if key[0] not in stale}
+        return len(stale)
 
     def register(self, reference: str, destination: str, recipient_node: int,
                  gateway_node: int, kind: str, *, now: datetime | None = None) -> IncidentReply:
         at = now or datetime.now(timezone.utc)
         if (not isinstance(at, datetime) or at.tzinfo is None or
-                not _REFERENCE.fullmatch(reference) or kind not in ('test', 'critical_low') or
+                not isinstance(reference, str) or not _REFERENCE.fullmatch(reference) or
+                kind not in ('test', 'critical_low') or
                 not isinstance(destination, str) or not destination.startswith('notify.mesh_')):
             raise ValueError('Invalid mesh incident')
+        at = at.astimezone(timezone.utc)
+        self.prune(now=at)
         recipient, gateway = node_number(recipient_node), node_number(gateway_node)
         if recipient == gateway or reference in self.incidents:
             raise ValueError('Duplicate reference or gateway and recipient are identical')
-        at = at.astimezone(timezone.utc)
+        if len(self.incidents) >= MAX_TRACKED_INCIDENTS:
+            raise ValueError('Reply tracker full; start a fresh session before tracking more messages')
         # This expiry is a tracking rule, not a clinical timeout.
         item = IncidentReply(reference, destination, recipient, gateway, kind,
                              at, at + timedelta(minutes=30))
@@ -79,6 +107,8 @@ class MeshReplyTracker:
         at = now or datetime.now(timezone.utc)
         if not isinstance(at, datetime) or at.tzinfo is None or not isinstance(envelope, dict):
             return None
+        at = at.astimezone(timezone.utc)
+        self.prune(now=at)
         if envelope.get('event_type') != 'meshtastic_api_text_message':
             return None
         data = envelope.get('data')
@@ -97,7 +127,6 @@ class MeshReplyTracker:
         record = self.incidents.get(match.group(1))
         if not record or record.response:
             return None
-        at = at.astimezone(timezone.utc)
         if at < record.created_at or at >= record.expires_at:
             return None
         try:
@@ -122,11 +151,17 @@ class MeshReplyTracker:
             sent_at = datetime.fromisoformat(fired.replace('Z', '+00:00'))
         except ValueError:
             return None
-        if (sent_at.tzinfo is None or not record.created_at <= sent_at.astimezone(timezone.utc) < record.expires_at or
-                sent_at.astimezone(timezone.utc) > at + timedelta(seconds=2)):
+        if sent_at.tzinfo is None:
+            return None
+        sent_at = sent_at.astimezone(timezone.utc)
+        if (not record.created_at <= sent_at < record.expires_at or
+                sent_at > at + timedelta(seconds=2) or
+                at - sent_at > MAX_EVENT_AGE):
             return None
         if packet_id is not None:
-            key = (sender, gateway, packet_id)
+            # Scope deduplication to the reference: packet IDs aren't globally
+            # unique over a long-running radio installation.
+            key = (record.reference, sender, gateway, packet_id)
             if key in self.seen_packets:
                 return None
             self.seen_packets.add(key)

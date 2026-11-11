@@ -1,3 +1,11 @@
+## 4.17.0 - Radio reply tracking limits
+
+- I added expiry-based cleanup for old Meshtastic incidents and their packet IDs. Completed tracking stays readable for an hour after the 30-minute reply window, then leaves memory.
+- Capped recent incident history at 512 records. New tracking is refused if full, rather than silently deleting an active request.
+- Home Assistant radio events delayed by more than two minutes can no longer count as fresh replies.
+- Scoped duplicate packet IDs to their own incident reference so reused radio packet numbers do not hide an unrelated reply.
+- Added checks for delayed events, old-record cleanup, capacity and malformed references. These are software checks, not radio delivery tests.
+
 ## 4.16.0 - Keep radio replies tied to their listening session
 
 - I tied each reply, status update and shutdown notice to the Home Assistant listener that produced it. An old connection can no longer overwrite a new one's status or feed a late response into a current backup decision.

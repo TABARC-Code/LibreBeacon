@@ -5,7 +5,7 @@ from unittest.mock import patch
 import json
 import unittest
 
-from librebeacon.mesh_replies import MeshReplyTracker, node_number
+from librebeacon.mesh_replies import MeshReplyTracker, node_number, MAX_TRACKED_INCIDENTS, RETAIN_AFTER_EXPIRY
 from librebeacon.mesh_stream import websocket_url, listen_for_replies
 
 NOW = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
@@ -83,6 +83,54 @@ class MeshtasticReplies(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.tracker.register(REF,'notify.mesh_other',123,GATEWAY,'test',now=NOW)
         self.assertEqual(self.tracker.register('LB-FFFFFFFFFFFFFFFF','notify.mesh_carer',NODE,GATEWAY,'test',now=NOW).kind,'test')
+
+
+    def test_old_ha_event_is_not_treated_as_a_new_reply(self):
+        old = reply(fired=NOW + timedelta(seconds=15))
+        self.assertIsNone(self.tracker.receive(old,now=NOW+timedelta(minutes=5)))
+        self.assertEqual(self.item.response,'')
+        fresh = reply(fired=NOW + timedelta(minutes=4,seconds=45))
+        self.assertIs(self.tracker.receive(fresh,now=NOW+timedelta(minutes=5)),self.item)
+
+    def test_packet_numbers_can_repeat_between_different_incidents(self):
+        second = 'LB-FFFFFFFFFFFFFFFF'
+        self.tracker.register(second,'notify.mesh_carer',NODE,GATEWAY,'test',now=NOW)
+        self.assertIsNotNone(self.tracker.receive(reply(packet_id=101),now=NOW+timedelta(minutes=1)))
+        next_event = reply(text=second+' OK', packet_id=101)
+        self.assertEqual(self.tracker.receive(next_event,now=NOW+timedelta(minutes=1)).reference,second)
+        self.assertEqual(len(self.tracker.seen_packets),2)
+
+    def test_prune_releases_incidents_and_packet_ids_together(self):
+        self.assertIsNotNone(self.tracker.receive(reply(),now=NOW+timedelta(minutes=1)))
+        at = NOW + timedelta(minutes=31) + RETAIN_AFTER_EXPIRY
+        self.assertEqual(self.tracker.prune(now=at),1)
+        self.assertEqual(self.tracker.incidents,{})
+        self.assertEqual(self.tracker.seen_packets,set())
+        self.assertEqual(self.tracker.prune(now=at),0)
+
+    def test_register_cleans_old_history_before_checking_capacity(self):
+        later = NOW + timedelta(hours=2)
+        result = self.tracker.register('LB-EEEEEEEEEEEEEEEE','notify.mesh_carer',
+                                      NODE,GATEWAY,'test',now=later)
+        self.assertEqual(result.reference,'LB-EEEEEEEEEEEEEEEE')
+        self.assertNotIn(REF,self.tracker.incidents)
+
+    def test_tracker_capacity_rejects_a_new_record_without_eviction(self):
+        for n in range(1,MAX_TRACKED_INCIDENTS):
+            self.tracker.register('LB-'+f'{n:016X}','notify.mesh_carer',
+                                  NODE,GATEWAY,'test',now=NOW)
+        self.assertEqual(len(self.tracker.incidents),MAX_TRACKED_INCIDENTS)
+        with self.assertRaisesRegex(ValueError,'tracker full'):
+            self.tracker.register('LB-FFFFFFFFFFFFFFFF','notify.mesh_carer',
+                                  NODE,GATEWAY,'test',now=NOW)
+        self.assertEqual(len(self.tracker.incidents),MAX_TRACKED_INCIDENTS)
+
+    def test_bad_reference_and_naive_prune_clock_rejected(self):
+        for bad in (None,True,42,[],{},'bogus'):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                self.tracker.register(bad,'notify.mesh_carer',NODE,GATEWAY,'test',now=NOW)
+        with self.assertRaises(ValueError):
+            self.tracker.prune(now=datetime(2026,11,1,12))
 
     def test_stream_url_uses_same_host_and_tls(self):
         self.assertEqual(websocket_url('https://ha.example.org:8123'), 'wss://ha.example.org:8123/api/websocket')
