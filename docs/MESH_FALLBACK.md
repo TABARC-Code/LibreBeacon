@@ -39,3 +39,7 @@ I now check the approved contact list, emergency alert switches and live reply-l
 ## Listener restarts
 
 Queued Home Assistant events are bound to the listening session that received them. When a listener stops, its late replies and status messages cannot affect a subsequent session. An interrupted listener still cancels the pending automatic backup; restarting listening does not restore a missed fallback or replay an incident. A healthy Home Assistant socket is not proof of a delivered radio packet.
+
+## Old reply events (v4.17.0)
+
+A queued Home Assistant event more than two minutes old is not accepted as a fresh acknowledgement. This avoids treating a late event after reconnection as a new `OK` or `CANT` response. It can also miss a delayed genuine reply, which is another reason the radio backup cannot be relied on as a safety-critical alarm. Matching event metadata is not proof of the sender's identity or attendance.

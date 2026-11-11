@@ -128,6 +128,10 @@ On the guided Meshtastic field check's Report page I can now record witnessed ou
 
 The Home Assistant radio-reply listener now ties every queued reply and connection update to the listening session that received it. Delayed events from a stopped socket are ignored, so an old `OK`, `CANT` or disconnect notice cannot change the current session's backup decision. Stopping or losing the listener still cancels pending automatic radio follow-ups. This is software queue protection, not proof of actual Meshtastic receipt.
 
+## Radio reply retention (v4.17.0)
+
+Radio replies are tracked only in memory while LibreBeacon runs. A request has a 30-minute reply window; its status remains in memory for another hour before clean-up on subsequent activity. Tracking is limited to 512 recent incidents, and Home Assistant events delayed by more than two minutes are ignored by automatic acknowledgement logic. The reference, node-number and gateway checks are **not cryptographic authentication** and don't establish human assistance. A missed reply is not proof that no reply was sent. See [Meshtastic messaging](docs/MESH_MESSAGING.md).
+
 ## What does and doesn't work yet
 
 **Implemented in source and checked with automated tests:** Home Assistant REST client, secure local token-store integration, desktop setup screens, sensor selection, measurement timestamp checks, ordinary/critical-low detection, duplicate suppression, sound, Windows speech, desktop visual notice, Home Assistant scripts, and opt-in notification targets. A Linux virtual-display smoke test can instantiate the desktop interface.
