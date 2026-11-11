@@ -135,8 +135,9 @@ class MeshtasticReplies(unittest.TestCase):
 
     def test_unpaired_unicode_in_event_text_does_not_crash_tracker(self):
         # JSON can legally decode this escape to an invalid Unicode scalar.
-        event = reply(text=REF+' OK\\ud800')
-        event['data']['data']['message'] = __import__('json').loads('"\\\\ud800"')
+        raw = json.dumps(chr(0xD800))
+        event = reply(text=json.loads(raw))
+        self.assertEqual(event['data']['data']['message'], chr(0xD800))
         self.assertIsNone(self.tracker.receive(event,now=NOW+timedelta(minutes=1)))
         self.assertEqual(self.item.response,'')
 
