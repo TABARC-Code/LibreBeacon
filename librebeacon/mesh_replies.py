@@ -119,7 +119,10 @@ class MeshReplyTracker:
         if not isinstance(dest, dict) or dest.get('channel') is not None:
             return None  # Public/channel messages must never count as replies.
         msg = packet.get('message')
-        if not isinstance(msg, str) or len(msg.encode('utf-8')) > 64:
+        # Only the exact ASCII reference and OK/CANT reply are admissible.
+        # Don't encode untrusted text just to count it: JSON can carry a
+        # lone surrogate, which would raise and stop the desktop event loop.
+        if not isinstance(msg, str) or len(msg) > 64:
             return None
         match = _REPLY.fullmatch(msg)
         if not match:
@@ -149,14 +152,15 @@ class MeshReplyTracker:
             return None
         try:
             sent_at = datetime.fromisoformat(fired.replace('Z', '+00:00'))
-        except ValueError:
-            return None
-        if sent_at.tzinfo is None:
-            return None
-        sent_at = sent_at.astimezone(timezone.utc)
-        if (not record.created_at <= sent_at < record.expires_at or
-                sent_at > at + timedelta(seconds=2) or
-                at - sent_at > MAX_EVENT_AGE):
+            if sent_at.tzinfo is None:
+                return None
+            sent_at = sent_at.astimezone(timezone.utc)
+            if (not record.created_at <= sent_at < record.expires_at or
+                    sent_at - at > timedelta(seconds=2) or
+                    at - sent_at > MAX_EVENT_AGE):
+                return None
+        except (ValueError, OverflowError):
+            # An extreme but parseable UTC offset can overflow conversion.
             return None
         if packet_id is not None:
             # Scope deduplication to the reference: packet IDs aren't globally

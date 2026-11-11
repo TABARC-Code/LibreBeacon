@@ -115,6 +115,24 @@ class ListenerSessionTests(TestCase):
         self.assertTrue(app.mesh_listener_ready)
         self.assertIn('Listening for Meshtastic replies', statuses[-1])
 
+
+    def test_one_invalid_event_does_not_stop_subsequent_reply_processing(self):
+        app, statuses = self.app()
+        item={'event_type':'meshtastic_api_text_message'}
+        app.mesh_replies.receive.side_effect=[
+            UnicodeError('invalid reply text'),
+            SimpleNamespace(reference='LB-0123456789ABCDEF',
+                            destination='notify.mesh_one', response='OK'),
+        ]
+        for _ in range(2):
+            app.queue.put(('mesh_reply_event', True, (app.mesh_listener_stop, item)))
+        self.flush(app)
+        self.assertEqual(app.mesh_replies.receive.call_count,2)
+        app.mesh_fallback.reply.assert_called_once_with(
+            'LB-0123456789ABCDEF', 'notify.mesh_one', 'OK')
+        self.assertTrue(any('ignored' in text for text in statuses))
+        self.assertTrue(app.mesh_listener_ready)
+
     def test_malformed_untagged_status_is_ignored(self):
         app, statuses = self.app()
         app.queue.put(('mesh_reply_status', True, 'Reply listener disconnected'))

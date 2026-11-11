@@ -132,6 +132,41 @@ class MeshtasticReplies(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.tracker.prune(now=datetime(2026,11,1,12))
 
+
+    def test_unpaired_unicode_in_event_text_does_not_crash_tracker(self):
+        # JSON can legally decode this escape to an invalid Unicode scalar.
+        event = reply(text=REF+' OK\\ud800')
+        event['data']['data']['message'] = __import__('json').loads('"\\\\ud800"')
+        self.assertIsNone(self.tracker.receive(event,now=NOW+timedelta(minutes=1)))
+        self.assertEqual(self.item.response,'')
+
+    def test_oversized_or_non_text_message_is_ignored(self):
+        for value in ('x'*10000, b'opaque', None, {'message': REF+' OK'}, REF+' OK '+chr(0xDC00)):
+            with self.subTest(kind=type(value).__name__):
+                event=reply()
+                event['data']['data']['message']=value
+                self.assertIsNone(self.tracker.receive(event,now=NOW+timedelta(minutes=1)))
+        self.assertEqual(self.item.response,'')
+
+    def test_extreme_timestamp_offset_is_not_an_exception(self):
+        event=reply()
+        event['time_fired']='0001-01-01T00:00:00+14:00'
+        self.assertIsNone(self.tracker.receive(event,now=NOW+timedelta(minutes=1)))
+        self.assertEqual(self.item.response,'')
+
+    def test_upstream_text_event_shape_with_metadata(self):
+        # Matches the integration's _on_text_message event payload fields.
+        event=reply(packet_id=529)
+        event['data']['data'].update({
+            'from_id': f'!{NODE:08x}', 'hops_away': 1, 'hop_start': 3,
+            'hop_limit': 2, 'rx_snr': 6.5, 'rx_rssi': -85,
+            'via_mqtt': False, 'xeddsa_signed': False,
+            'reply_id': None, 'is_reaction': False,
+        })
+        found=self.tracker.receive(event,now=NOW+timedelta(minutes=1))
+        self.assertIs(found,self.item)
+        self.assertEqual(found.response,'OK')
+
     def test_stream_url_uses_same_host_and_tls(self):
         self.assertEqual(websocket_url('https://ha.example.org:8123'), 'wss://ha.example.org:8123/api/websocket')
         self.assertEqual(websocket_url('http://ha.local:8123'), 'ws://ha.local:8123/api/websocket')

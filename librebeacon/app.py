@@ -1046,7 +1046,12 @@ class LibreBeaconApp:
                 elif key=='mesh_reply_event':
                     if not self.mesh_listener_ready:
                         continue
-                    matched = self.mesh_replies.receive(result)
+                    try:
+                        matched = self.mesh_replies.receive(result)
+                    except (ValueError, TypeError, UnicodeError, OverflowError):
+                        # One malformed packet must not stop the queue pump.
+                        self.mesh_reply_state.set('Invalid radio reply ignored. Listening continues.')
+                        continue
                     if (matched is not None and self.mesh_listener_ready and
                             self.mesh_listener_active and not self.mesh_listener_stop.is_set()):
                         self.mesh_fallback.reply(matched.reference, matched.destination, matched.response)

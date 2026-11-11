@@ -1,3 +1,10 @@
+## 4.18.0 - Reply parser resilience
+
+- I stopped the reply parser from encoding incoming text merely to check its length. Malformed Unicode can now be rejected as an ordinary invalid event rather than interrupting reply processing.
+- I made extreme or invalid Home Assistant event timestamps fail closed, without an uncaught time-conversion error.
+- I put a narrow error boundary around the desktop reply handler. A malformed packet can be ignored while the next valid reply still gets processed.
+- Added tests against the current Meshtastic Home Assistant event structure and malformed message cases. Radio delivery remains untested.
+
 ## 4.17.0 - Radio reply tracking limits
 
 - I added expiry-based cleanup for old Meshtastic incidents and their packet IDs. Completed tracking stays readable for an hour after the 30-minute reply window, then leaves memory.
