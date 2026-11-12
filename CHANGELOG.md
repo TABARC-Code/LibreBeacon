@@ -1,3 +1,10 @@
+## 4.20.0 - Hold backup when reply tracking or gateway is missing
+
+- I stopped the optional no-reply backup timer from arming when the primary incident could not be registered with the reply tracker. An untracked reply mustn't quietly turn into a second radio message.
+- The queued backup now checks Home Assistant's current Meshtastic gateway state before asking it to transmit. Disconnected and unverified gateways stop the attempt.
+- Consent and listener state are rechecked after the gateway lookup, which may take a while.
+- Added mock-network regression checks for gateway loss and changes during the lookup. No actual radio or clinical reliability claim.
+
 ## 4.19.0 - Recheck test consent at transmission
 
 - I closed a gap in the guided Meshtastic test: a recipient could lose consent while Home Assistant was answering a slow node lookup. The sender now consults current contact settings again before the notification request.

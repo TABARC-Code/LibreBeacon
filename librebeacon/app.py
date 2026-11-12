@@ -486,11 +486,18 @@ class LibreBeaconApp:
             from .contacts import dispatch_route
             from .mesh_fallback import require_backup_send
             def still_approved():
-                # The worker may have waited on HA. Recheck before handing it
-                # a message; a Cancel click isn't merely decoration.
-                require_backup_send(self.mesh_fallback, self.settings, route,
-                    listener_ready=(self.mesh_listener_ready and self.mesh_listener_active
-                                    and not self.mesh_listener_stop.is_set()))
+                # The socket may be fine while the physical gateway is not.
+                # Check HA's current gateway, then consent again after that read.
+                def permission():
+                    require_backup_send(self.mesh_fallback, self.settings, route,
+                        listener_ready=(self.mesh_listener_ready and self.mesh_listener_active
+                                        and not self.mesh_listener_stop.is_set()))
+                permission()
+                gateways = discover_gateways(client.states(), now=datetime.now(timezone.utc))
+                if (len(gateways) != 1 or not gateways[0].verified_type
+                        or gateways[0].status != 'HA REPORTS CONNECTED'):
+                    raise ValueError('Meshtastic gateway is not confirmed connected')
+                permission()
             try:
                 ref = dispatch_route(client, route, emergency_message(),
                     mesh_kind='critical_low', before_mesh_send=still_approved)
@@ -1093,6 +1100,8 @@ class LibreBeaconApp:
                     self.status.set(self.mesh_fallback.describe())
                 elif key=='emergency_delivery':
                     # The service's acknowledgement is not a person's reply.
+                    # No reply tracking means no safe no-reply backup timer.
+                    tracked_requests = set()
                     targets = {r.label: r.target for r in self.route_records}
                     for label, accepted, detail, reference in result:
                         if label in targets:
@@ -1107,8 +1116,9 @@ class LibreBeaconApp:
                                         gateway = node_number(self.settings.mesh_gateway_node_id)
                                         self.mesh_replies.register(reference, destination, route.mesh_node_id,
                                                                    gateway, 'critical_low')
+                                        tracked_requests.add((destination, reference))
                                     except ValueError:
-                                        self.mesh_reply_state.set('Gateway identity missing: reply tracking off.')
+                                        self.mesh_reply_state.set('Primary reply tracking unavailable; backup held.')
                     # Only arm after the primary request has actually been accepted.
                     # Backups are otherwise held; the status tells the operator why.
                     if self.settings.mesh_fallback_enabled:
@@ -1118,7 +1128,8 @@ class LibreBeaconApp:
                         sent = next(((ok, ref) for label, ok, _, ref in result if label == name), None)
                         listener_ready = (self.mesh_listener_ready and self.mesh_listener_active
                                           and not self.mesh_listener_stop.is_set())
-                        if sent and sent[0] and sent[1] and listener_ready:
+                        if (sent and sent[0] and sent[1] and listener_ready
+                                and (primary, sent[1]) in tracked_requests):
                             try:
                                 self.mesh_fallback.arm(primary, backup, sent[1],
                                     minutes=self.settings.mesh_fallback_minutes, now=time.monotonic(),
@@ -1126,7 +1137,8 @@ class LibreBeaconApp:
                             except ValueError:
                                 self.mesh_fallback.cancel('Invalid backup settings; no backup scheduled.')
                         else:
-                            self.mesh_reply_state.set('Backup not scheduled: no accepted primary request or listener unavailable.')
+                            self.mesh_reply_state.set(
+                                'Backup not scheduled: primary reply tracking or listener unavailable.')
                     self.refresh_routes()
                     delivered = sum(1 for _, ok, _, _ in result if ok)
                     failed = sum(1 for _, ok, _, _ in result if not ok)

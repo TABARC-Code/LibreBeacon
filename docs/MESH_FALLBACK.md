@@ -43,3 +43,9 @@ Queued Home Assistant events are bound to the listening session that received th
 ## Old reply events (v4.17.0)
 
 A queued Home Assistant event more than two minutes old is not accepted as a fresh acknowledgement. This avoids treating a late event after reconnection as a new `OK` or `CANT` response. It can also miss a delayed genuine reply, which is another reason the radio backup cannot be relied on as a safety-critical alarm. Matching event metadata is not proof of the sender's identity or attendance.
+
+## Reply tracking and gateway checks (v4.20.0)
+
+A no-reply timer only starts after the first Home Assistant request is accepted **and** the reply tracker registers the incident with a confirmed gateway node number. If tracking fails, the optional backup remains held; an accepted notification request on its own is not sufficient. Before a queued backup transmission, LibreBeacon queries Home Assistant again and requires one verified, connected Meshtastic gateway. It checks current contact consent and listener state again after that query.
+
+A connected gateway still does not establish end-to-end delivery or a known radio owner. This deliberately favours withholding an uncertain second message. Phone and email routes and the official Libre alarms are unaffected.

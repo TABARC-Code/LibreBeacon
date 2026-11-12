@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.19.0** · experimental community prototype · MIT licence
+Current version: **4.20.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.19.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.20.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -135,6 +135,10 @@ Radio replies are tracked only in memory while LibreBeacon runs. A request has a
 ## Field-check consent revocation (v4.19.0)
 
 The guided TEST ONLY wizard now checks the live contact settings again after Home Assistant looks up the recipient, immediately before it requests a radio transmission. If consent, the saved node identity or the enabled destination has changed, it blocks the test and clears the approval. A definite pre-send block is recorded separately from a request failure where delivery cannot be established. A request already submitted to Home Assistant cannot be recalled.
+
+## Backup gateway and reply-tracking checks (v4.20.0)
+
+The optional secondary Meshtastic contact is now held unless the primary request was accepted **and its reply was registered for matching**. If the gateway identity is missing or the tracker refuses the incident, no no-reply timer starts. A queued backup rechecks the current Home Assistant gateway state just before transmission and refuses a disconnected, missing or unverified gateway. Recipient consent and listener state are checked again after the gateway query. These software checks do not prove radio coverage or receipt.
 
 ## What does and doesn't work yet
 

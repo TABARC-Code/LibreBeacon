@@ -154,6 +154,15 @@ class BackupWorkerTests(unittest.TestCase):
             def __init__(self):
                 self.sent = []
                 self.after_lookup = None
+                self.gateway_state = 'connected'
+                self.after_gateway = None
+
+            def states(self):
+                if self.after_gateway:
+                    self.after_gateway()
+                return [{'entity_id': 'meshtastic.gateway_local',
+                         'state': self.gateway_state,
+                         'attributes': {'device_class': 'gateway'}}]
 
             def state(self, target):
                 if self.after_lookup:
@@ -203,5 +212,30 @@ class BackupWorkerTests(unittest.TestCase):
     def test_cancelling_while_ha_lookup_was_pending(self):
         app, client, send = self.make_queued_send()
         client.after_lookup = lambda: app.mesh_fallback.cancel('Operator stopped backup')
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])
+
+    def test_disconnected_gateway_blocks_queued_backup(self):
+        app, client, send = self.make_queued_send()
+        client.gateway_state = 'disconnected'
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])
+
+    def test_untyped_gateway_blocks_queued_backup(self):
+        app, client, send = self.make_queued_send()
+        client.states = lambda: [{'entity_id': 'meshtastic.gateway_local',
+                                  'state': 'connected', 'attributes': {}}]
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])
+
+    def test_consent_revoked_during_gateway_lookup_blocks_backup(self):
+        app, client, send = self.make_queued_send()
+        client.after_gateway = lambda: app.settings.emergency_routes[-1].update(consent=False)
+        self.assertFalse(send()[1])
+        self.assertEqual(client.sent, [])
+
+    def test_listener_disconnected_during_gateway_lookup_blocks_backup(self):
+        app, client, send = self.make_queued_send()
+        client.after_gateway = app.mesh_listener_stop.set
         self.assertFalse(send()[1])
         self.assertEqual(client.sent, [])
