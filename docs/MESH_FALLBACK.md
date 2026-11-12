@@ -49,3 +49,9 @@ A queued Home Assistant event more than two minutes old is not accepted as a fre
 A no-reply timer only starts after the first Home Assistant request is accepted **and** the reply tracker registers the incident with a confirmed gateway node number. If tracking fails, the optional backup remains held; an accepted notification request on its own is not sufficient. Before a queued backup transmission, LibreBeacon queries Home Assistant again and requires one verified, connected Meshtastic gateway. It checks current contact consent and listener state again after that query.
 
 A connected gateway still does not establish end-to-end delivery or a known radio owner. This deliberately favours withholding an uncertain second message. Phone and email routes and the official Libre alarms are unaffected.
+
+## Cancellation during a Home Assistant request (v4.21.0)
+
+The backup distinguishes a queued request from a request already in flight. **Cancel Pending Backup** prevents a queued message from being requested. Once the application begins calling Home Assistant, cancellation is a stop request only; it cannot recall what Home Assistant or the radio may already have received. The display says the outcome is unknown until a Home Assistant response arrives. An accepted response is still not a radio receipt; a timeout does not establish that the message never went out.
+
+The automatic fallback never retries the same incident. If a matching `OK` arrives while the backup is queued but before the Home Assistant request, the queued backup is held instead.

@@ -24,6 +24,8 @@ class FakeHA:
     def __init__(self):
         self.sent = []
         self.gateway_state = 'connected'
+        self.when_sending = None
+        self.raise_after_sending = False
 
     def states(self):
         return [{'entity_id': 'meshtastic.gateway_local',
@@ -37,6 +39,10 @@ class FakeHA:
 
     def send_notification(self, entity, message):
         self.sent.append((entity, message))
+        if self.when_sending:
+            self.when_sending()
+        if self.raise_after_sending:
+            raise TimeoutError('Home Assistant did not return a result')
 
 
 def radio_reply(response='CANT', *, reference=REF, sender=17, age_seconds=0):
@@ -181,3 +187,45 @@ class BackupFlowTests(TestCase):
                             [(FIRST.label, False, 'HomeAssistantError', '')]))
         self.flush()
         self.assertIsNone(self.app.mesh_fallback.pending)
+
+    def test_cancel_after_ha_request_begins_preserves_unknown_status(self):
+        self.accepted_primary()
+        self.incoming('CANT')
+        self.queue_backup()
+        self.client.when_sending = lambda: self.app.mesh_fallback.cancel('Operator cancelled.')
+        result = self.works[0][1]()
+        self.assertTrue(result[1])
+        self.assertEqual(len(self.client.sent), 1)
+        self.assertEqual(self.app.mesh_fallback.pending.state, 'cancel_requested')
+        self.app.queue.put(('mesh_fallback_delivery', True, result))
+        self.flush()
+        self.assertEqual(self.app.mesh_fallback.pending.state, 'accepted_after_cancel')
+        self.assertIn('unconfirmed', self.app.mesh_fallback.describe())
+        self.assertIn('cancellation', self.app.mesh_fallback.describe())
+
+    def test_timeout_during_request_after_cancellation_is_not_definite(self):
+        self.accepted_primary()
+        self.incoming('CANT')
+        self.queue_backup()
+        self.client.when_sending = lambda: self.app.mesh_fallback.cancel('Operator cancelled.')
+        self.client.raise_after_sending = True
+        result = self.works[0][1]()
+        self.assertFalse(result[1])
+        self.assertEqual(len(self.client.sent), 1)
+        self.app.queue.put(('mesh_fallback_delivery', True, result))
+        self.flush()
+        self.assertEqual(self.app.mesh_fallback.pending.state, 'uncertain_after_cancel')
+        self.assertIn('may have been transmitted', self.app.mesh_fallback.describe())
+
+    def test_cancelled_queue_never_calls_home_assistant(self):
+        self.accepted_primary()
+        self.incoming('CANT')
+        self.queue_backup()
+        self.app.mesh_fallback.cancel('Operator cancelled.')
+        result = self.works[0][1]()
+        self.assertFalse(result[1])
+        self.assertEqual(self.client.sent, [])
+        self.app.queue.put(('mesh_fallback_delivery', True, result))
+        self.flush()
+        self.assertEqual(self.app.mesh_fallback.pending.state, 'cancelled')
+        self.assertIn('No backup notification was requested', self.app.mesh_fallback.describe())

@@ -1,3 +1,11 @@
+## 4.21.0 - Cancellation while a backup is being sent
+
+- I split the backup state into queued and in-flight phases. A cancellation while still queued stops the request; cancelling after the Home Assistant call begins can no longer claim a definite stop.
+- An accepted response arriving after cancellation now remains visible, labelled as accepted by Home Assistant with delivery unconfirmed. A timeout after cancellation is recorded as unknown, not as proof of no transmission.
+- A matching OK reply arriving before a queued backup dispatch now holds that backup.
+- The GUI uses the actual backup status rather than always saying it was cancelled.
+- Added lifecycle and application-queue regression tests for these timing cases. No physical-radio reliability claims.
+
 ## 4.20.0 - Hold backup when reply tracking or gateway is missing
 
 - I stopped the optional no-reply backup timer from arming when the primary incident could not be registered with the reply tracker. An untracked reply mustn't quietly turn into a second radio message.

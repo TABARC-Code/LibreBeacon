@@ -7,6 +7,7 @@ Everything here is in memory. A reboot clears it, as it should for now.
 from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
+from threading import Lock
 import re
 
 
@@ -25,6 +26,7 @@ class MeshFallback:
     """Single-stage backup, once per incident. All clocks are monotonic seconds."""
     def __init__(self):
         self.pending: PendingFallback | None = None
+        self._phase_lock = Lock()
 
     @staticmethod
     def validate(primary: str, backup: str, minutes: int) -> None:
@@ -48,21 +50,40 @@ class MeshFallback:
         return True
 
     def reply(self, reference: str, destination: str, response: str) -> None:
-        item = self.pending
-        if item is None or item.reference != reference or item.primary != destination:
-            return
-        if item.state != 'waiting':
-            return
-        if response == 'OK':
-            item.state, item.outcome = 'cancelled', 'Matching OK reply observed. Backup held.'
-        elif response == 'CANT':
-            item.state = 'cant'
+        with self._phase_lock:
+            item = self.pending
+            if item is None or item.reference != reference or item.primary != destination:
+                return
+            if response == 'OK' and item.state in ('waiting', 'cant', 'sending'):
+                # An OK that arrives before dispatch still gets to hold the backup.
+                item.state, item.outcome = 'cancelled', 'Matching OK reply observed. Backup held before sending.'
+            elif response == 'CANT' and item.state == 'waiting':
+                item.state = 'cant'
 
     def cancel(self, reason: str = 'Operator cancelled the pending backup') -> None:
-        if self.pending is not None and self.pending.state in ('waiting', 'cant', 'sending'):
-            if self.pending.state == 'sending':
-                reason += ' A request already started cannot be recalled.'
-            self.pending.state, self.pending.outcome = 'cancelled', reason
+        with self._phase_lock:
+            item = self.pending
+            if item is None:
+                return
+            if item.state in ('waiting', 'cant', 'sending'):
+                item.state, item.outcome = 'cancelled', reason + ' No backup notification was requested.'
+            elif item.state == 'in_flight':
+                item.state = 'cancel_requested'
+                item.outcome = (reason + ' The Home Assistant request may already be in progress; '
+                                'transmission and delivery are unknown.')
+
+    def begin_request(self) -> None:
+        """Mark the exact boundary before calling the HA notification service.
+
+        Cancel and this transition share a lock. Once the transition wins,
+        the status cannot claim the request was definitely stopped.
+        """
+        with self._phase_lock:
+            if self.pending is None or self.pending.state != 'sending':
+                raise ValueError('Backup cancelled or no queued request remains')
+            self.pending.state = 'in_flight'
+            self.pending.outcome = ('Home Assistant backup request started; '
+                                    'acceptance and radio delivery are not yet known.')
 
     def due(self, *, now: float, listener_ready: bool) -> str | None:
         item = self.pending
@@ -78,15 +99,35 @@ class MeshFallback:
             item.state, item.outcome = 'expired', 'Fallback window expired; no new request.'
             return None
         if item.state == 'cant' or now >= item.due:
-            item.state, item.outcome = 'sending', 'Backup request attempted once; no automatic retry.'
+            item.state, item.outcome = 'sending', 'Backup queued; no notification requested yet.'
             return item.backup
         return None
 
     def sent(self, *, accepted: bool) -> None:
-        if self.pending is not None and self.pending.state == 'sending':
-            self.pending.state = 'sent' if accepted else 'failed'
-            self.pending.outcome = ('Backup request accepted by Home Assistant; delivery unconfirmed.'
-                                    if accepted else 'Backup request failed; no repeat attempted.')
+        with self._phase_lock:
+            item = self.pending
+            if item is None:
+                return
+            if item.state == 'sending':
+                # The worker stopped before reaching the HA request boundary.
+                item.state = 'blocked' if not accepted else 'sent'
+                item.outcome = ('Backup blocked before Home Assistant was asked to send.'
+                                if not accepted else
+                                'Home Assistant reported acceptance; radio delivery unconfirmed.')
+            elif item.state == 'in_flight':
+                item.state = 'sent' if accepted else 'failed'
+                item.outcome = ('Backup request accepted by Home Assistant; delivery unconfirmed.'
+                                if accepted else
+                                'Home Assistant backup request failed or timed out; '
+                                'transmission and delivery remain unknown. No retry.')
+            elif item.state == 'cancel_requested':
+                item.state = 'accepted_after_cancel' if accepted else 'uncertain_after_cancel'
+                item.outcome = (
+                    'Home Assistant accepted the backup despite the cancellation request; '
+                    'radio delivery remains unconfirmed.'
+                    if accepted else
+                    'Home Assistant request failed or timed out after cancellation; '
+                    'the backup may have been transmitted. Delivery unknown. No retry.')
 
     def describe(self) -> str:
         p = self.pending

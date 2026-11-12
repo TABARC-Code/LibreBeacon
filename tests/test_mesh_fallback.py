@@ -19,6 +19,7 @@ class FallbackTests(unittest.TestCase):
         self.assertIsNone(self.f.due(now=1599, listener_ready=True))
         self.assertEqual(self.f.due(now=1600, listener_ready=True), 'notify.mesh_two')
         self.assertIsNone(self.f.due(now=1700, listener_ready=True))
+        self.f.begin_request()
         self.f.sent(accepted=True)
         self.assertIn('delivery unconfirmed', self.f.describe())
         self.assertIsNone(self.f.due(now=1900, listener_ready=True))
@@ -67,8 +68,9 @@ class FallbackTests(unittest.TestCase):
 
     def test_failed_backup_does_not_retry(self):
         self.f.due(now=1600,listener_ready=True)
+        self.f.begin_request()
         self.f.sent(accepted=False)
-        self.assertIn('failed',self.f.describe())
+        self.assertIn('failed or timed out',self.f.describe())
         self.assertIsNone(self.f.due(now=1800,listener_ready=True))
 
 if __name__=='__main__':unittest.main()
@@ -125,7 +127,7 @@ class QueuedBackupTests(unittest.TestCase):
     def test_operator_can_cancel_queued_send(self):
         self.engine.cancel('Operator stopped the backup')
         self.assertEqual(self.engine.pending.state,'cancelled')
-        self.assertIn('cannot be recalled',self.engine.pending.outcome)
+        self.assertIn('No backup notification was requested',self.engine.pending.outcome)
         with self.assertRaises(ValueError):
             require_backup_send(self.engine,self.settings,self.backup,listener_ready=True)
         self.engine.sent(accepted=True)
@@ -239,3 +241,71 @@ class BackupWorkerTests(unittest.TestCase):
         client.after_gateway = app.mesh_listener_stop.set
         self.assertFalse(send()[1])
         self.assertEqual(client.sent, [])
+
+class DispatchBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = MeshFallback()
+        self.engine.arm('notify.mesh_first', 'notify.mesh_backup', REF,
+                        minutes=2, now=100, listener_ready=True)
+        self.engine.due(now=220, listener_ready=True)
+
+    def test_cancel_before_dispatch_blocks_request_and_is_definite(self):
+        self.engine.cancel('Operator cancelled backup.')
+        self.assertEqual(self.engine.pending.state, 'cancelled')
+        self.assertIn('No backup notification was requested', self.engine.describe())
+        with self.assertRaises(ValueError):
+            self.engine.begin_request()
+        self.engine.sent(accepted=False)
+        self.assertEqual(self.engine.pending.state, 'cancelled')
+
+    def test_in_flight_cancellation_is_not_reported_as_stopped(self):
+        self.engine.begin_request()
+        self.engine.cancel('Operator cancelled backup.')
+        self.assertEqual(self.engine.pending.state, 'cancel_requested')
+        self.assertIn('unknown', self.engine.describe())
+        self.assertNotIn('No backup notification was requested', self.engine.describe())
+
+    def test_accepted_response_after_cancel_preserves_both_facts(self):
+        self.engine.begin_request()
+        self.engine.cancel('Operator cancelled backup.')
+        self.engine.sent(accepted=True)
+        self.assertEqual(self.engine.pending.state, 'accepted_after_cancel')
+        self.assertIn('accepted', self.engine.describe())
+        self.assertIn('cancellation', self.engine.describe())
+        self.assertIn('unconfirmed', self.engine.describe())
+        self.assertIsNone(self.engine.due(now=250, listener_ready=True))
+
+    def test_timeout_after_cancel_remains_indeterminate(self):
+        self.engine.begin_request()
+        self.engine.cancel('Operator cancelled backup.')
+        self.engine.sent(accepted=False)
+        self.assertEqual(self.engine.pending.state, 'uncertain_after_cancel')
+        self.assertIn('may have been transmitted', self.engine.describe())
+        self.assertIn('unknown', self.engine.describe().lower())
+        self.assertIsNone(self.engine.due(now=300, listener_ready=True))
+
+    def test_timeout_without_cancel_does_not_mean_no_delivery(self):
+        self.engine.begin_request()
+        self.engine.sent(accepted=False)
+        self.assertEqual(self.engine.pending.state, 'failed')
+        self.assertIn('delivery remain unknown', self.engine.describe())
+        self.assertIsNone(self.engine.due(now=250, listener_ready=True))
+
+    def test_preflight_error_can_be_labelled_blocked(self):
+        self.engine.sent(accepted=False)
+        self.assertEqual(self.engine.pending.state, 'blocked')
+        self.assertIn('before Home Assistant', self.engine.describe())
+
+    def test_matching_ok_before_dispatch_stops_queued_worker(self):
+        self.engine.reply(REF, 'notify.mesh_first', 'OK')
+        self.assertEqual(self.engine.pending.state, 'cancelled')
+        with self.assertRaises(ValueError):
+            self.engine.begin_request()
+
+    def test_second_dispatch_attempt_is_rejected(self):
+        self.engine.begin_request()
+        with self.assertRaises(ValueError):
+            self.engine.begin_request()
+        self.engine.sent(accepted=True)
+        with self.assertRaises(ValueError):
+            self.engine.begin_request()

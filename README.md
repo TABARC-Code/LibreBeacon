@@ -1,7 +1,7 @@
 # LibreBeacon
 
 **Accessible glucose notifications for Windows and Home Assistant.**  
-Current version: **4.20.0** · experimental community prototype · MIT licence
+Current version: **4.21.0** · experimental community prototype · MIT licence
 
 ---
 
@@ -38,7 +38,7 @@ The emergency contact screen is designed around buttons rather than code. Add a 
 ## Start on Windows
 
 **Easiest route:** after the Windows package workflow finishes, download
-`LibreBeacon-Setup-v4.20.0.exe` from its GitHub Actions artefact. Double-click it,
+`LibreBeacon-Setup-v4.21.0.exe` from its GitHub Actions artefact. Double-click it,
 follow the installer, then open LibreBeacon from the Start menu. This is an
 **unsigned experimental build**: Windows may warn you, and it has **not** been
 verified on a real Windows computer. Don't bypass warnings without checking the
@@ -139,6 +139,10 @@ The guided TEST ONLY wizard now checks the live contact settings again after Hom
 ## Backup gateway and reply-tracking checks (v4.20.0)
 
 The optional secondary Meshtastic contact is now held unless the primary request was accepted **and its reply was registered for matching**. If the gateway identity is missing or the tracker refuses the incident, no no-reply timer starts. A queued backup rechecks the current Home Assistant gateway state just before transmission and refuses a disconnected, missing or unverified gateway. Recipient consent and listener state are checked again after the gateway query. These software checks do not prove radio coverage or receipt.
+
+## Cancellation after backup dispatch (v4.21.0)
+
+A queued backup can be cancelled before any Home Assistant request is made. Once the request starts, cancellation instead records that delivery is **unknown**; the app cannot recall the radio packet. If Home Assistant later accepts the request, the display keeps both facts: cancellation was requested and Home Assistant accepted the send. If the request times out, the app does not claim the message was stopped. No automatic retry follows.
 
 ## What does and doesn't work yet
 

@@ -443,7 +443,7 @@ class LibreBeaconApp:
         self.mesh_fallback.cancel()
         if hasattr(self, 'fallback_status_text'):
             self.fallback_status_text.set(self.mesh_fallback.describe())
-        self.status.set('Pending backup cancelled. This does not change the official Libre alarm.')
+        self.status.set(self.mesh_fallback.describe() + ' Official Libre alarms are unchanged.')
 
     def check_mesh_fallback(self):
         if not hasattr(self, 'mesh_fallback'):
@@ -498,6 +498,9 @@ class LibreBeaconApp:
                         or gateways[0].status != 'HA REPORTS CONNECTED'):
                     raise ValueError('Meshtastic gateway is not confirmed connected')
                 permission()
+                # This is the last step before the HA service call. A cancel
+                # after this point cannot be reported as definitely unsent.
+                self.mesh_fallback.begin_request()
             try:
                 ref = dispatch_route(client, route, emergency_message(),
                     mesh_kind='critical_low', before_mesh_send=still_approved)
